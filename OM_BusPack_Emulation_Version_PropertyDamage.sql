@@ -1,7 +1,7 @@
 USE [CalibreSSiSdev]
 GO
 
-/****** Object:  StoredProcedure [emula].[OM_BusPack_Emulation_Version_PropertyDamage]    Script Date: 4/06/2024 5:47:35 PM ******/
+/****** Object:  StoredProcedure [emula].[OM_BusPack_Emulation_Version_PropertyDamage_Test]    Script Date: 4/06/2024 5:52:13 PM ******/
 SET ANSI_NULLS ON
 GO
 
@@ -11,12 +11,7 @@ GO
 
 
 
-
-
-
-
-
-CREATE procedure [emula].[OM_BusPack_Emulation_Version_PropertyDamage] 
+CREATE procedure [emula].[OM_BusPack_Emulation_Version_PropertyDamage_Test] 
 ( @version varchar(99)
   , @suffix varchar(99)) AS
 BEGIN
@@ -51,6 +46,8 @@ DECLARE
 , @PD_Emulation_Step7_A NVARCHAR(MAX)
 , @PD_Emulation_Step7_B NVARCHAR(MAX)
 , @PD_Emulation_Step7_C NVARCHAR(MAX)
+, @PD_Emulation_Step7_D NVARCHAR(MAX)
+, @PD_Emulation_Step7_E NVARCHAR(MAX)
 
 -- Step 8: Fire Protection Relativities
 , @PD_Emulation_Step8_A NVARCHAR(MAX)
@@ -86,11 +83,11 @@ select
 	, (a.BI_SI + a.AICOW + a.AccountsReceivable + a.claimsPreparation + a.lossofRent) as BI_SI_for_documents
 	, (a.BI_SI + a.AICOW + a.AccountsReceivable + a.claimsPreparation + a.lossofRent) * 0.2 as FC_documents
 from CalibreSSiSdev.emula.testing_input_'+@suffix+' a
-	left join CalibreSSiSdev.dbo.ccomm_freecovers_'+@suffix+'_'+@version+' b1 --Karen add 2022
+	left join CalibreSSiSdev.dbo.ccomm_freecovers_final b1 --Karen add 2022
 	on a.policy_number is not null and b1.section = ''BusinessInterruption'' and b1.CURRENT_FLAG = ''yes'' and b1.covertype = ''AICOW'' 
-	left join CalibreSSiSdev.dbo.ccomm_freecovers_'+@suffix+'_'+@version+' b2 --Karen add 2022
+	left join CalibreSSiSdev.dbo.ccomm_freecovers_final b2 --Karen add 2022
 	on a.policy_number is not null and b2.section = ''BusinessInterruption'' and b2.CURRENT_FLAG = ''yes'' and b2.covertype = ''Accounts Receivable''
-	left join CalibreSSiSdev.dbo.ccomm_freecovers_'+@suffix+'_'+@version+' b3 --Karen add 2022
+	left join CalibreSSiSdev.dbo.ccomm_freecovers_final b3 --Karen add 2022
 	on a.policy_number is not null and b3.section = ''BusinessInterruption'' and b3.CURRENT_FLAG = ''yes'' and b3.covertype = ''Claims Preparation''
 where PROPERTY_SECTION_TAKEN = 1 
 )
@@ -108,6 +105,7 @@ select
 
 	, a.BI_COVER_TYPE
 	, a.BI_IndemnityPeriod
+	, a.BI_IndemnityPeriodWks
 	, a.Category
 	, a.state
 	, a.ANZSIC
@@ -249,6 +247,28 @@ select
 	, year(TERM_START_DATE) - cast(YearBuilt as float) as building_age
 	, year(TERM_START_DATE) - a.YearRewired as RewiredAge
 
+	, a.ManufacturingPercentage 
+	, a.WashFacility
+	, a.FibreGlassWork
+	, a.StorageWarehouse
+	, a.RepairServicePremises
+	, a.RestaurantorBar
+	, a.Woodworking
+	, a.WoodworkingDustExtractorCleaning
+	, a.WoodworkingDustExtractors
+	, a.SprayPaintingControl
+	, a.WasteRemovalProcess
+	, a.TimberStorageYard
+	, a.Fire_Class
+
+	, a.OSQ107_Count
+	, a.OSQ100_Count
+	, a.OSQ104_Count
+	, a.OSQ99_Count
+	, a.OSQ111_Count
+	, a.OSQ112A_Count
+	, a.OSQ112B_Count
+
 into CalibreSSiSdev.emula.OM_Fire_testing_input1_'+@suffix+'_'+@version+' 
 from temp a
 ;
@@ -301,9 +321,9 @@ select a.*,
 	+ coalesce(documents_over_FC,0) + coalesce(goodwill,0) AS numeric(18,2))
 	end as Total_SI   -- get the total SI
 	 from CalibreSSiSdev.emula.OM_Fire_testing_input_'+@suffix+'_'+@version+' a 
-		 left join CalibreSSiSdev.dbo.ccomm_bi_'+@suffix+'_'+@version+' b --updated
+		 left join CalibreSSiSdev.dbo.ccomm_bi_final b --updated
 		 on a.BI_COVER_TYPE = b.relativitytype collate SQL_Latin1_General_CP1_CI_AS
-		 and a.BI_IndemnityPeriod = b.code collate SQL_Latin1_General_CP1_CI_AS and CURRENT_FLAG = ''YES''
+		 and Coalesce(a.BI_IndemnityPeriod collate SQL_Latin1_General_CP1_CI_AS, a.BI_IndemnityPeriodWks collate SQL_Latin1_General_CP1_CI_AS) = b.code collate SQL_Latin1_General_CP1_CI_AS and CURRENT_FLAG = ''YES''
 ),
 
 temp2 as (
@@ -316,12 +336,12 @@ select
 	, cast(d2.premiumlow as numeric(15,8)) as peril_prem_low
 	, d2.newrate as peril_new_rate 
 from temp1 a 
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_sicurve_'+@suffix+'_'+@version+' d --updated
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_sicurve_final d --updated
 	on a.STATE = d.state collate SQL_Latin1_General_CP1_CI_AS and d.type = ''Bldg_Cont'' 
 	and cast(a.Total_SI as numeric) >= cast(d.suminsuredfrom as numeric) 
 	and cast(a.Total_SI as numeric) <= cast(d.suminsuredto as numeric) 
 	and d.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_sicurve_'+@suffix+'_'+@version+' d2 --updated
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_sicurve_final d2 --updated
 	on a.STATE = d2.state collate SQL_Latin1_General_CP1_CI_AS and d2.type = ''Peril'' 
 	and cast(a.Total_SI as numeric) >= cast(d2.suminsuredfrom as numeric)
 	and cast(a.Total_SI as numeric) <= cast(d2.suminsuredto as numeric) 
@@ -418,32 +438,32 @@ select
  
 into CalibreSSiSdev.emula.OM_property_pre_1_'+@suffix+'_'+@version+'
 from CalibreSSiSdev.emula.OM_building_natural_peril_'+@suffix+'_'+@version+' a 
-left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' b1 --updated
+left join CalibreSSiSdev.dbo.ccomm_occupation_final b1 --updated
 	on  a.Tenant1_Occ = cast(b1.calliden_code as varchar) collate SQL_Latin1_General_CP1_CI_AS
 	and b1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' b2 --updated
+left join CalibreSSiSdev.dbo.ccomm_occupation_final b2 --updated
 	on a.Tenant2_Occ = cast(b2.calliden_code as varchar) collate SQL_Latin1_General_CP1_CI_AS
 	and b2.CURRENT_FLAG = ''YES'' 
-left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' b3 --updated
+left join CalibreSSiSdev.dbo.ccomm_occupation_final b3 --updated
 	on a.Tenant3_Occ = cast(b3.calliden_code as varchar) collate SQL_Latin1_General_CP1_CI_AS
 	and b3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' b4 --updated
+left join CalibreSSiSdev.dbo.ccomm_occupation_final b4 --updated
 	on a.Tenant4_Occ = cast(b4.calliden_code as varchar) collate SQL_Latin1_General_CP1_CI_AS
 	and b4.CURRENT_FLAG = ''YES'' 
-left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' b5 --updated
+left join CalibreSSiSdev.dbo.ccomm_occupation_final b5 --updated
 	on a.Tenant5_Occ = cast(b5.calliden_code as varchar) collate SQL_Latin1_General_CP1_CI_AS
 	and b5.CURRENT_FLAG = ''YES''  
-left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' b6 --updated
+left join CalibreSSiSdev.dbo.ccomm_occupation_final b6 --updated
 	on a.Tenant6_Occ = cast(b6.calliden_code as varchar) collate SQL_Latin1_General_CP1_CI_AS
 	and b6.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' b7 --updated
+left join CalibreSSiSdev.dbo.ccomm_occupation_final b7 --updated
 	on a.Tenant7_Occ = cast(b7.calliden_code as varchar) collate SQL_Latin1_General_CP1_CI_AS
 	and b7.CURRENT_FLAG = ''YES'' 
-left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' bb --updated
+left join CalibreSSiSdev.dbo.ccomm_occupation_final bb --updated
 	on a.ANZSIC = cast(bb.calliden_code as varchar) collate SQL_Latin1_General_CP1_CI_AS 
 	and bb.CURRENT_FLAG = ''YES'' 
 
-left join CalibreSSiSdev.dbo.ccomm_location_'+@suffix+'_'+@version+' c1 --updated
+left join CalibreSSiSdev.dbo.ccomm_location_final c1 --updated
 	on a.state + ''_'' + upper(a.suburb) + ''_'' + a.pcode = c1.locationindex collate SQL_Latin1_General_CP1_CI_AS
 	and c1.CURRENT_FLAG = ''YES'' 
 
@@ -451,108 +471,108 @@ left join CalibreSSiSdev.dbo.ccomm_location_'+@suffix+'_'+@version+' c1 --update
 
 
 SET @PD_Emulation_Step3_B='
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' d1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final d1
 	on a.WallConstruction = d1.code collate SQL_Latin1_General_CP1_CI_AS
 	and d1.relativitytype = ''Building'' and d1.groupid = ''WALL'' 
 	and d1.CURRENT_FLAG = ''YES'' 
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' d2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final d2
 	on a.WallConstruction = d2.code collate SQL_Latin1_General_CP1_CI_AS
 	and d2.relativitytype = ''CSO'' and d2.groupid = ''WALL''
 	and d2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' d3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final d3
 	on a.WallConstruction = d3.code collate SQL_Latin1_General_CP1_CI_AS
 	and d3.relativitytype = ''Peril'' and d3.groupid = ''WALL''
 	and d3.CURRENT_FLAG = ''YES'' 
 
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' e1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final e1
 	on a.RoofConstruction = e1.code collate SQL_Latin1_General_CP1_CI_AS
 	and e1.relativitytype = ''Building'' and e1.groupid = ''Roof''
 	and e1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' e2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final e2
 	on a.RoofConstruction = e2.code collate SQL_Latin1_General_CP1_CI_AS
 	and e2.relativitytype = ''CSO'' and e2.groupid = ''Roof''
 	and e2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' e3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final e3
 	on a.RoofConstruction = e3.code collate SQL_Latin1_General_CP1_CI_AS
 	and e3.relativitytype = ''Peril'' and e3.groupid = ''Roof''
 	and e3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' f1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final f1
 	on a.FloorConstruction = f1.code collate SQL_Latin1_General_CP1_CI_AS
 	and f1.relativitytype = ''Building'' and f1.groupid = ''Floor''
 	and f1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' f2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final f2
 	on a.FloorConstruction = f2.code collate SQL_Latin1_General_CP1_CI_AS
 	and f2.relativitytype = ''CSO'' and f2.groupid = ''Floor''
 	and f2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' f3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final f3
 	on a.FloorConstruction = f3.code collate SQL_Latin1_General_CP1_CI_AS
 	and f3.relativitytype = ''Peril'' and f3.groupid = ''Floor''
 	and f3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' g1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final g1
 	on a.building_age >= g1.lowerfrom and 
 	a.building_age <= g1.upperto 
 	and g1.groupid = ''BuildingAge'' and g1.relativitytype = ''Building''
 	and g1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' g2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final g2
 	on a.building_age >= g2.lowerfrom and 
 	a.building_age <= g2.upperto 
 	and g2.groupid = ''BuildingAge'' and g2.relativitytype = ''CSO''
 	and g2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' g3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final g3
 	on a.building_age >= g3.lowerfrom and 
 	a.building_age <= g3.upperto 
 	and g3.groupid = ''BuildingAge'' and g3.relativitytype = ''Peril''
 	and g3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' h1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final h1
 	on a.LocationType = h1.code collate SQL_Latin1_General_CP1_CI_AS
 	and h1.relativitytype = ''Building'' and h1.groupid  = ''FireLocationType''
 	and h1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' h2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final h2
 	on a.LocationType = h2.code collate SQL_Latin1_General_CP1_CI_AS
 	and h2.relativitytype = ''CSO'' and h2.groupid  = ''FireLocationType''
 	and h2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' h3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final h3
 	on a.LocationType = h3.code collate SQL_Latin1_General_CP1_CI_AS
 	and h3.relativitytype = ''Peril'' and h3.groupid  = ''FireLocationType''
 	and h3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' i1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final i1
 	on a.Total_SI >= cast(i1.lowerfrom as float) and 
 	a.Total_SI < cast(i1.upperto as float)
 	and i1.groupid = ''TotalFireSI'' and i1.relativitytype = ''Building''
 	and i1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' i2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final i2
 	on a.Total_SI >= cast(i2.lowerfrom as float) and 
 	a.Total_SI < cast(i2.upperto as float)
 	and i2.groupid = ''TotalFireSI'' and i2.relativitytype = ''CSO''
 	and i2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' i3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final i3
 	on a.Total_SI >= cast(i3.lowerfrom as float) and 
 	a.Total_SI < cast(i3.upperto as float)
 	and i3.groupid = ''TotalFireSI'' and i3.relativitytype = ''Peril''
 	and i3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_excess_'+@suffix+'_'+@version+' j1
+left join CalibreSSiSdev.dbo.ccomm_excess_final j1
 	on j1.relativitytype = ''Fire_BuildingExcess'' and a.STATE = j1.state collate SQL_Latin1_General_CP1_CI_AS
 	and a.PropertyExcess = j1.excessvalue
 	and j1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_excess_'+@suffix+'_'+@version+' j2
+left join CalibreSSiSdev.dbo.ccomm_excess_final j2
 	on j2.relativitytype = ''Fire_CSOExcess'' and a.STATE = j2.state collate SQL_Latin1_General_CP1_CI_AS
 	and a.PropertyExcess = j2.excessvalue
 	and j2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_excess_'+@suffix+'_'+@version+' j3
+left join CalibreSSiSdev.dbo.ccomm_excess_final j3
 	on j3.relativitytype = ''Fire_PerilsExcess'' and a.STATE = j3.state collate SQL_Latin1_General_CP1_CI_AS
 	and a.PropertyExcess = j3.excessvalue
 	and j3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' k1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final k1
 	on k1.groupid = ''PropertyOwner'' and 
 	case when a.Category=''PO'' then ''Yes'' else ''NO'' end = k1.code
 	and k1.relativitytype = ''Building''
 	and k1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' k2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final k2
 	on k2.groupid = ''PropertyOwner'' and 
 	case when a.Category=''PO'' then ''Yes'' else ''NO'' end = k2.code
 	and k2.relativitytype = ''CSO''
 	and k2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' k3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final k3
 	on k3.groupid = ''PropertyOwner'' and 
 	case when a.Category=''PO'' then ''Yes'' else ''NO'' end = k3.code
 	and k3.relativitytype = ''Peril''
@@ -674,133 +694,133 @@ select
 				and SprinklerStandards = ''YES'' then ''1''
 		  when Fire_Protection_2 = ''REELS'' then ''1''
 		  else  be3.value end as REELS_NONE_Peril --1.02
-	, case when Fire_Protection_3 = ''SPRINK'' then bf1.value else ''1'' end as Sprinklers_Building --(y)100%sprinkle+(y)standardsprinkle->0.7; others 1.
-	, case when Fire_Protection_3 = ''SPRINK'' then bf2.value else ''1'' end as Sprinklers_CSO--(y)100%sprinkle+(y)standardsprinkle->0.7; others 1. 
-	, case when Fire_Protection_3 = ''SPRINK'' then bf3.value else ''1'' end as Sprinklers_Peril --all 1
+	, Coalesce(bf1.value, ''1'') as Sprinklers_Building --(y)100%sprinkle+(y)standardsprinkle->0.7; others 1.
+	, Coalesce(bf2.value, ''1'') as Sprinklers_CSO--(y)100%sprinkle+(y)standardsprinkle->0.7; others 1. 
+	, Coalesce(bf3.value, ''1'') as Sprinklers_Peril --all 1
 ';
 
 
 SET @PD_Emulation_Step4_B='
 into CalibreSSiSdev.emula.OM_property_pre_2_temp_'+@suffix+'_'+@version+'
 from CalibreSSiSdev.emula.OM_property_pre_1_'+@suffix+'_'+@version+' a 
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' l1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final l1
 	on a.Fire_Protection_1 = l1.code  collate SQL_Latin1_General_CP1_CI_AS
 	and l1.relativitytype  = ''Building''
 	and l1.groupid = ''FireProtectionDiscount''
 	and l1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' l2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final l2
 	on a.Fire_Protection_1 = l2.code  collate SQL_Latin1_General_CP1_CI_AS
 	and l2.relativitytype  = ''CSO''
 	and l2.groupid = ''FireProtectionDiscount''
 	and l2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' l3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final l3
 	on a.Fire_Protection_1 = l3.code  collate SQL_Latin1_General_CP1_CI_AS
 	and l3.relativitytype  = ''Peril''
 	and l3.groupid = ''FireProtectionDiscount''
 	and l3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' m1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final m1
 	on a.Fire_Protection_2 = m1.code  collate SQL_Latin1_General_CP1_CI_AS
 	and m1.relativitytype  = ''Building''
 	and m1.groupid = ''FireProtectionDiscount''
 	and m1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' m2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final m2
 	on a.Fire_Protection_2 = m2.code  collate SQL_Latin1_General_CP1_CI_AS
 	and m2.relativitytype  = ''CSO''
 	and m2.groupid = ''FireProtectionDiscount''
 	and m2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' m3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final m3
 	on a.Fire_Protection_2 = m3.code  collate SQL_Latin1_General_CP1_CI_AS
 	and m3.relativitytype  = ''Peril''
 	and m3.groupid = ''FireProtectionDiscount''
 	and m3.CURRENT_FLAG = ''YES''
 
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' n1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final n1
 	on a.Fire_Protection_3 = n1.code  collate SQL_Latin1_General_CP1_CI_AS
 	and n1.relativitytype  = ''Building''
 	and n1.groupid = ''FireProtectionDiscount''
 	and n1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' n2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final n2
 	on a.Fire_Protection_3 = n2.code  collate SQL_Latin1_General_CP1_CI_AS
 	and n2.relativitytype  = ''CSO''
 	and n2.groupid = ''FireProtectionDiscount''
 	and n2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' n3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final n3
 	on a.Fire_Protection_3 = n3.code  collate SQL_Latin1_General_CP1_CI_AS
 	and n3.relativitytype  = ''Peril''
 	and n3.groupid = ''FireProtectionDiscount''
 	and n3.CURRENT_FLAG = ''YES''
 
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' ll1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final ll1
 	on a.Fire_Protection_4 = ll1.code  collate SQL_Latin1_General_CP1_CI_AS
 	and ll1.relativitytype  = ''Building''
 	and ll1.groupid = ''FireProtectionDiscount''
 	and ll1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' ll2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final ll2
 	on a.Fire_Protection_4 = ll2.code  collate SQL_Latin1_General_CP1_CI_AS
 	and ll2.relativitytype  = ''CSO''
 	and ll2.groupid = ''FireProtectionDiscount''
 	and ll2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' ll3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final ll3
 	on a.Fire_Protection_4 = ll3.code  collate SQL_Latin1_General_CP1_CI_AS
 	and ll3.relativitytype  = ''Peril''
 	and ll3.groupid = ''FireProtectionDiscount''
 	and ll3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' mm1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final mm1
 	on a.Fire_Protection_5 = mm1.code  collate SQL_Latin1_General_CP1_CI_AS
 	and mm1.relativitytype  = ''Building''
 	and mm1.groupid = ''FireProtectionDiscount''
 	and mm1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' mm2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final mm2
 	on a.Fire_Protection_5 = mm2.code  collate SQL_Latin1_General_CP1_CI_AS
 	and mm2.relativitytype  = ''CSO''
 	and mm2.groupid = ''FireProtectionDiscount''
 	and mm2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' mm3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final mm3
 	on a.Fire_Protection_5 = mm3.code  collate SQL_Latin1_General_CP1_CI_AS
 	and mm3.relativitytype  = ''Peril''
 	and mm3.groupid = ''FireProtectionDiscount''
 	and mm3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' nn1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final nn1
 	on a.Fire_Protection_6 = nn1.code  collate SQL_Latin1_General_CP1_CI_AS
 	and nn1.relativitytype  = ''Building''
 	and nn1.groupid = ''FireProtectionDiscount''
 	and nn1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' nn2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final nn2
 	on a.Fire_Protection_6 = nn2.code  collate SQL_Latin1_General_CP1_CI_AS
 	and nn2.relativitytype  = ''CSO''
 	and nn2.groupid = ''FireProtectionDiscount''
 	and nn2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' nn3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final nn3
 	on a.Fire_Protection_6 = nn3.code  collate SQL_Latin1_General_CP1_CI_AS
 	and nn3.relativitytype  = ''Peril''
 	and nn3.groupid = ''FireProtectionDiscount''
 	and nn3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' lll1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final lll1
 	on a.Fire_Protection_7 = lll1.code  collate SQL_Latin1_General_CP1_CI_AS
 	and lll1.relativitytype  = ''Building''
 	and lll1.groupid = ''FireProtectionDiscount''
 	and lll1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' lll2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final lll2
 	on a.Fire_Protection_7 = lll2.code  collate SQL_Latin1_General_CP1_CI_AS
 	and lll2.relativitytype  = ''CSO''
 	and lll2.groupid = ''FireProtectionDiscount''
 	and lll2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' lll3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final lll3
 	on a.Fire_Protection_7 = lll3.code  collate SQL_Latin1_General_CP1_CI_AS
 	and lll3.relativitytype  = ''Peril''
 	and lll3.groupid = ''FireProtectionDiscount''
 	and lll3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' mmm1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final mmm1
 	on a.Fire_Protection_8 = mmm1.code  collate SQL_Latin1_General_CP1_CI_AS
 	and mmm1.relativitytype  = ''Building''
 	and mmm1.groupid = ''FireProtectionDiscount''
 	and mmm1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' mmm2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final mmm2
 	on a.Fire_Protection_8 = mmm2.code  collate SQL_Latin1_General_CP1_CI_AS
 	and mmm2.relativitytype  = ''CSO''
 	and mmm2.groupid = ''FireProtectionDiscount''
 	and mmm2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' mmm3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final mmm3
 	on a.Fire_Protection_8 = mmm3.code  collate SQL_Latin1_General_CP1_CI_AS
 	and mmm3.relativitytype  = ''Peril''
 	and mmm3.groupid = ''FireProtectionDiscount''
@@ -810,210 +830,213 @@ left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' mmm
 
 
 SET @PD_Emulation_Step4_C='
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' nnn1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final nnn1
 	on a.Fire_Protection_9 = nnn1.code  collate SQL_Latin1_General_CP1_CI_AS
 	and nnn1.relativitytype  = ''Building''
 	and nnn1.groupid = ''FireProtectionDiscount''
 	and nnn1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' nnn2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final nnn2
 	on a.Fire_Protection_9 = nnn2.code  collate SQL_Latin1_General_CP1_CI_AS
 	and nnn2.relativitytype  = ''CSO''
 	and nnn2.groupid = ''FireProtectionDiscount''
 	and nnn2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' nnn3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final nnn3
 	on a.Fire_Protection_9 = nnn3.code  collate SQL_Latin1_General_CP1_CI_AS
 	and nnn3.relativitytype  = ''Peril''
 	and nnn3.groupid = ''FireProtectionDiscount''
 	and nnn3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' llll1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final llll1
 	on a.Fire_Protection_10 = llll1.code  collate SQL_Latin1_General_CP1_CI_AS
 	and llll1.relativitytype  = ''Building''
 	and llll1.groupid = ''FireProtectionDiscount''
 	and llll1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' llll2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final llll2
 	on a.Fire_Protection_10 = llll2.code  collate SQL_Latin1_General_CP1_CI_AS
 	and llll2.relativitytype  = ''CSO''
 	and llll2.groupid = ''FireProtectionDiscount''
 	and llll2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' llll3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final llll3
 	on a.Fire_Protection_10 = llll3.code  collate SQL_Latin1_General_CP1_CI_AS
 	and llll3.relativitytype  = ''Peril''
 	and llll3.groupid = ''FireProtectionDiscount''
 	and llll3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' mmmm1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final mmmm1
 	on a.Fire_Protection_11 = mmmm1.code  collate SQL_Latin1_General_CP1_CI_AS
 	and mmmm1.relativitytype  = ''Building''
 	and mmmm1.groupid = ''FireProtectionDiscount''
 	and mmmm1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' mmmm2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final mmmm2
 	on a.Fire_Protection_11 = mmmm2.code  collate SQL_Latin1_General_CP1_CI_AS
 	and mmmm2.relativitytype  = ''CSO''
 	and mmmm2.groupid = ''FireProtectionDiscount''
 	and mmmm2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' mmmm3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final mmmm3
 	on a.Fire_Protection_11 = mmmm3.code  collate SQL_Latin1_General_CP1_CI_AS
 	and mmmm3.relativitytype  = ''Peril''
 	and mmmm3.groupid = ''FireProtectionDiscount''
 	and mmmm3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' o1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final o1
 	on o1.code = ''EXTING & REELS'' and o1.relativitytype = ''Building''
 	and o1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' o2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final o2
 	on o2.code = ''EXTING'' and o2.relativitytype = ''Building''
 	and o2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' o3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final o3
 	on o3.code = ''REELS'' and o3.relativitytype = ''Building''
 	and o3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' p1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final p1
 	on p1.code = ''EXTING & REELS'' and p1.relativitytype = ''CSO''
 	and p1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' p2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final p2
 	on p2.code = ''EXTING'' and p2.relativitytype = ''CSO''
 	and p2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' p3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final p3
 	on p3.code = ''REELS'' and p3.relativitytype = ''CSO''
 	and p3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' q1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final q1
 	on q1.code = ''EXTING & REELS'' and q1.relativitytype = ''Peril''
 	and q1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' q2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final q2
 	on q2.code = ''EXTING'' and q2.relativitytype = ''Peril''
 	and q2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' q3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final q3
 	on q3.code = ''REELS'' and q3.relativitytype = ''Peril''
 	and q3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' r1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final r1
 	on r1.code = ''SMOKEMON & SMOKEUNMON'' and r1.relativitytype = ''Building''
 	and r1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' r2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final r2
 	on r2.code = ''SMOKEMON'' and r2.relativitytype = ''Building''
 	and r2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' r3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final r3
 	on r3.code = ''SMOKEUNMON'' and r3.relativitytype = ''Building''
 	and r3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' s1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final s1
 	on s1.code = ''SMOKEMON & SMOKEUNMON'' and s1.relativitytype = ''CSO''
 	and s1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' s2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final s2
 	on s2.code = ''SMOKEMON'' and s2.relativitytype = ''CSO''
 	and s2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' s3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final s3
 	on s3.code = ''SMOKEUNMON'' and s3.relativitytype = ''CSO''
 	and s3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' t1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final t1
 	on t1.code = ''SMOKEMON & SMOKEUNMON'' and t1.relativitytype = ''Peril''
 	and t1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' t2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final t2
 	on t2.code = ''SMOKEMON'' and t2.relativitytype = ''Peril''
 	and t2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' t3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final t3
 	on t3.code = ''SMOKEUNMON'' and t3.relativitytype = ''Peril''
 	and t3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' u1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final u1
 	on u1.groupid = ''FireProtectionDiscount'' and u1.code = ''FIREALARM & BASEALARM'' and u1.relativitytype = ''Building''
 	and u1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' u2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final u2
 	on u2.groupid = ''FireProtectionDiscount'' and u2.code = ''FIREALARM'' and u2.relativitytype = ''Building''
 	and u2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' u3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final u3
 	on u3.groupid = ''FireProtectionDiscount'' and u3.code = ''BASEALARM'' and u3.relativitytype = ''Building''
 	and u3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' v1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final v1
 	on v1.groupid = ''FireProtectionDiscount'' and v1.code = ''FIREALARM & BASEALARM'' and v1.relativitytype = ''CSO''
 	and v1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' v2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final v2
 	on v2.groupid = ''FireProtectionDiscount'' and v2.code = ''FIREALARM'' and v2.relativitytype = ''CSO''
 	and v2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' v3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final v3
 	on v3.groupid = ''FireProtectionDiscount'' and v3.code = ''BASEALARM'' and v3.relativitytype = ''CSO''
 	and v3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' w1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final w1
 	on w1.groupid = ''FireProtectionDiscount'' and  w1.code = ''FIREALARM & BASEALARM'' and w1.relativitytype = ''Peril''
 	and w1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' w2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final w2
 	on w2.groupid = ''FireProtectionDiscount'' and w2.code = ''FIREALARM'' and w2.relativitytype = ''Peril''
 	and w2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' w3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final w3
 	on w3.groupid = ''FireProtectionDiscount'' and w3.code = ''BASEALARM'' and w3.relativitytype = ''Peril''
 	and w3.CURRENT_FLAG = ''YES''
 '
 SET @PD_Emulation_Step4_D='
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' x1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final x1
 	on x1.groupid = ''FireProtectionDiscountMin'' and x1.code = ''Minimum2'' and x1.relativitytype = ''Building''
 	and x1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' x2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final x2
 	on x2.groupid = ''FireProtectionDiscount'' and x2.code = ''NONE'' and x2.relativitytype = ''Building''
 	and x2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' x3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final x3
 	on x3.groupid = ''FireProtectionDiscountMin'' and x3.code = ''Minimum1'' and x3.relativitytype = ''Building''
 	and x3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' y1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final y1
 	on y1.groupid = ''FireProtectionDiscountMin'' and y1.code = ''Minimum2'' and y1.relativitytype = ''CSO''
 	and y1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' y2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final y2
 	on y2.groupid = ''FireProtectionDiscount'' and y2.code = ''NONE'' and y2.relativitytype = ''CSO''
 	and y2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' y3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final y3
 	on y3.groupid = ''FireProtectionDiscountMin'' and y3.code = ''Minimum1'' and y3.relativitytype = ''CSO''
 	and y3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' z1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final z1
 	on z1.groupid = ''FireProtectionDiscountMin'' and z1.code = ''Minimum2'' and z1.relativitytype = ''Peril''
 	and z1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' z2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final z2
 	on z2.groupid = ''FireProtectionDiscount'' and z2.code = ''NONE'' and z2.relativitytype = ''Peril''
 	and z2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' z3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final z3
 	on z3.groupid = ''FireProtectionDiscountMin'' and z3.code = ''Minimum1'' and z3.relativitytype = ''Peril''
 	and z3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' ba1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final ba1
 	on ba1.groupid = ''FireProtectionDiscountMin'' and ba1.code = ''Minimum2'' and ba1.relativitytype = ''Building''
 	and ba1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' ba2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final ba2
 	on ba2.groupid = ''FireProtectionDiscountMin'' and ba2.code = ''Minimum1'' and ba2.relativitytype = ''Building''
 	and ba2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' bb1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final bb1
 	on bb1.groupid = ''FireProtectionDiscountMin'' and bb1.code = ''Minimum2'' and bb1.relativitytype = ''CSO''
 	and bb1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' bb2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final bb2
 	on bb2.groupid = ''FireProtectionDiscountMin'' and bb2.code = ''Minimum1'' and bb2.relativitytype = ''CSO''
 	and bb2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' bc1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final bc1
 	on bc1.groupid = ''FireProtectionDiscountMin'' and bc1.code = ''Minimum2'' and bc1.relativitytype = ''Peril''
 	and bc1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' bc2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final bc2
 	on bc2.groupid = ''FireProtectionDiscountMin'' and bc2.code = ''Minimum1'' and bc2.relativitytype = ''Peril''
 	and bc2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' bd1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final bd1
 	on bd1.groupid = ''FireProtectionLoading'' and bd1.code = ''NO EXTING'' and bd1.relativitytype = ''Building''
 	and bd1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' bd2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final bd2
 	on bd2.groupid = ''FireProtectionLoading'' and bd2.code = ''NO EXTING'' and bd2.relativitytype = ''CSO''
 	and bd2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' bd3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final bd3
 	on bd3.groupid = ''FireProtectionLoading'' and bd3.code = ''NO EXTING'' and bd3.relativitytype = ''Peril''
 	and bd3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' be1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final be1
 	on be1.groupid = ''FireProtectionLoading'' and be1.code = ''NO REELS'' and be1.relativitytype = ''Building''
 	and be1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' be2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final be2
 	on be2.groupid = ''FireProtectionLoading'' and be2.code = ''NO REELS'' and be2.relativitytype = ''CSO''
 	and be2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' be3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final be3
 	on be3.groupid = ''FireProtectionLoading'' and be3.code = ''NO REELS'' and be3.relativitytype = ''Peril''
 	and be3.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' bf1
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final bf1
 	on bf1.groupid = ''FireProtectionSprinklers'' and bf1.code = ''DUAL01'' collate SQL_Latin1_General_CP1_CI_AS
-	and bf1.rangefield = case when a.PercentSprinklerCoverage = 100 then ''Yes'' else ''No'' end + coalesce(cast(a.SprinklerStandards as varchar),''No'')  collate SQL_Latin1_General_CP1_CI_AS
+	and bf1.rangefield = case when a.Channel in (''STEADFAST_BUSINESS_PACK_PRODUCT'') Then case when a.PercentSprinklerCoverage = 100 then ''Yes'' else ''No'' end + coalesce(cast(a.SprinklerStandards as varchar),''No'')  collate SQL_Latin1_General_CP1_CI_AS
+		When a.Channel in (''CALIBRE_BUSINESS_PACK_PRODUCT'',''BIZCOVER_BUSINESS_PACK_PRODUCT'') then ''Yes'' + case when a.PercentSprinklerCoverage = 100 then ''Yes'' else ''No'' end collate SQL_Latin1_General_CP1_CI_AS else ''NoNo'' end 
 	and bf1.relativitytype = ''Building''
 	and bf1.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' bf2
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final bf2
 	on bf2.groupid = ''FireProtectionSprinklers'' and bf2.code = ''DUAL01'' collate SQL_Latin1_General_CP1_CI_AS
-	and bf2.rangefield = case when a.PercentSprinklerCoverage = 100 then ''Yes'' else ''No'' end + coalesce(cast(a.SprinklerStandards as varchar),''No'') collate SQL_Latin1_General_CP1_CI_AS
+	and bf2.rangefield = case when a.Channel in (''STEADFAST_BUSINESS_PACK_PRODUCT'') Then case when a.PercentSprinklerCoverage = 100 then ''Yes'' else ''No'' end + coalesce(cast(a.SprinklerStandards as varchar),''No'')  collate SQL_Latin1_General_CP1_CI_AS
+		When a.Channel in (''CALIBRE_BUSINESS_PACK_PRODUCT'',''BIZCOVER_BUSINESS_PACK_PRODUCT'') then ''Yes'' + case when a.PercentSprinklerCoverage = 100 then ''Yes'' else ''No'' end collate SQL_Latin1_General_CP1_CI_AS else ''NoNo'' end 
 	and bf2.relativitytype = ''CSO'' --change from Building to CSO in
 	and bf2.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' bf3
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final bf3
 	on bf3.groupid = ''FireProtectionSprinklers'' and bf3.code = ''DUAL01'' collate SQL_Latin1_General_CP1_CI_AS
-	and bf3.rangefield = case when a.PercentSprinklerCoverage = 100 then ''Yes'' else ''No'' end + coalesce(cast(a.SprinklerStandards as varchar),''No'') collate SQL_Latin1_General_CP1_CI_AS
+	and bf3.rangefield = case when a.Channel in (''STEADFAST_BUSINESS_PACK_PRODUCT'') Then case when a.PercentSprinklerCoverage = 100 then ''Yes'' else ''No'' end + coalesce(cast(a.SprinklerStandards as varchar),''No'')  collate SQL_Latin1_General_CP1_CI_AS
+		When a.Channel in (''CALIBRE_BUSINESS_PACK_PRODUCT'',''BIZCOVER_BUSINESS_PACK_PRODUCT'') then ''Yes'' + case when a.PercentSprinklerCoverage = 100 then ''Yes'' else ''No'' end collate SQL_Latin1_General_CP1_CI_AS else ''NoNo'' end 
 	and bf3.relativitytype = ''Peril'' --change from Building to Peril in
 	and bf3.CURRENT_FLAG = ''YES''
 ;'
@@ -1038,13 +1061,13 @@ select
 		 else d.value end as Max_Loading_for_EXTING_REELS_Peril--b.value =1.15
 into CalibreSSiSdev.emula.OM_property_pre_2_temp2_'+@suffix+'_'+@version+'
 from CalibreSSiSdev.emula.OM_property_pre_2_temp_'+@suffix+'_'+@version+' a 
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' b
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final b
 	on b.groupid = ''FireProtectionLoadingMax'' and b.relativitytype = ''Building''
 	and b.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' c
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final c
 	on c.groupid = ''FireProtectionLoadingMax'' and c.relativitytype = ''CSO''
 	and c.CURRENT_FLAG = ''YES''
-left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' d
+left join CalibreSSiSdev.dbo.ccomm_businessproperty_final d
 	on d.groupid = ''FireProtectionLoadingMax'' and d.relativitytype = ''Peril''
 	and d.CURRENT_FLAG = ''YES''
 ;'
@@ -1063,7 +1086,7 @@ with OM_propety_2_temp_'+@suffix+'_'+@version+' as (
 select 
 	a.*
 	, case when Fire_Protection_1_to_11 = 0 then d.value --''FireProtectionDiscount'' ''None''
-		 when a.Fire_Protection_3 = ''SPRINK'' then
+		 when a.PercentSprinklerCoverage = 100 then
 			(
 			select max(Fire_Protection_Rel2) from 
 			(values(a.Min_Rel_Max_Discount_Fire_2_Building), --0.8/0.75
@@ -1087,7 +1110,7 @@ select
 			) as b(Fire_Protection_Rel)))) as b(Fire_Protection_Rel2)) --no sprinkle in this situation
 		END AS  Fire_Protection_Rel_Building
 	, case when Fire_Protection_1_to_11 = 0 then e.value --''FireProtectionDiscount'' ''None'' -CSO
-		   when Fire_Protection_3 = ''SPRINK''  then 
+		   when PercentSprinklerCoverage = 100 then 
 				(select max(Fire_Protection_Rel2) from --0.85
 					(values (Min_Rel_Max_Discount_Fire_2_CSO),
 						((select max(Fire_Protection_Rel)  from 
@@ -1108,7 +1131,7 @@ select
 				) as b(Fire_Protection_Rel)))) as b(Fire_Protection_Rel2))
 			END AS  Fire_Protection_Rel_CSO
 	, case when Fire_Protection_1_to_11 = 0 then f.value 
-		   when Fire_Protection_3 = ''SPRINK'' then
+		   when PercentSprinklerCoverage = 100 then
 				(select max(Fire_Protection_Rel2) from 
 				(values(Min_Rel_Max_Discount_Fire_2_Peril),
 				((select max(Fire_Protection_Rel)  from 
@@ -1128,11 +1151,11 @@ select
 				) as b(Fire_Protection_Rel)))) as b(Fire_Protection_Rel2))
 	END AS  Fire_Protection_Rel_Peril
  from CalibreSSiSdev.emula.OM_property_pre_2_temp2_'+@suffix+'_'+@version+' a
- left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' d
+ left join CalibreSSiSdev.dbo.ccomm_businessproperty_final d
 	 on d.groupid = ''FireProtectionDiscount'' and d.code = ''NONE'' and d.relativitytype = ''Building''
- left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' e
+ left join CalibreSSiSdev.dbo.ccomm_businessproperty_final e
 	  on e.groupid = ''FireProtectionDiscount'' and e.code = ''NONE'' and e.relativitytype = ''CSO''
- left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' f
+ left join CalibreSSiSdev.dbo.ccomm_businessproperty_final f
 	  on f.groupid = ''FireProtectionDiscount'' and f.code = ''NONE'' and f.relativitytype = ''Peril''
 ),
 
@@ -1140,31 +1163,43 @@ OM_property_2_temp2_'+@suffix+'_'+@version+' as (
 select 
 	a.*
 	, case when a.Fire_Protection_0 = ''NONE'' or --distinct Fire_Protection_0: null or NONE
-		(a.Fire_Protection_3 = ''SPRINK'' and ((SprinklerStandards = ''YES'' and SprinklerWaterType is not null) )) then 1
+		( 
+			(a.Channel in (''STEADFAST_BUSINESS_PACK_PRODUCT'') and a.Fire_Protection_3 = ''SPRINK'' and ((SprinklerStandards = ''YES'' and SprinklerWaterType is not null) )) 
+		Or ( a.Channel in (''CALIBRE_BUSINESS_PACK_PRODUCT'', ''BIZCOVER_BUSINESS_PACK_PRODUCT'') and PercentSprinklerCoverage = 100 and (SprinklerStandards = ''YES'' and SprinklerWaterType is not null) )
+		
+		) then 1
 		 when a.Fire_Protection_1 is null and a.Fire_Protection_2 is null then --no exting or reel
 			Max_Loading_for_EXTING_REELS_BUILDING --cast(EXTING_NONE_Building as numeric(15,5)) * cast(REELS_NONE_Building as numeric(15,5)) -> --(1.15 or 1)*(1.02 or 1)
-		when a.Fire_Protection_1 is null and a.Fire_Protection_2 is not null then 
+		when a.Fire_Protection_1 is null and a.Fire_Protection_2 is not null then -- no exting but reels exists
 			EXTING_NONE_BUILDING
-		when a.Fire_Protection_1 is not null and a.Fire_Protection_2 is null then
-			REELS_NONE_Building 
+		when a.Fire_Protection_1 is not null and a.Fire_Protection_2 is null then -- no reels but exting exists
+			REELS_NONE_Building   
 			else 1 end as Fire_Protection_Loading_Relativity_Building
 	, case when a.Fire_Protection_0 = ''NONE'' or 
-		(a.Fire_Protection_3 = ''SPRINK'' and ((SprinklerStandards = ''YES'' and SprinklerWaterType is not null) )) then 1
+		( 
+			(a.Channel in (''STEADFAST_BUSINESS_PACK_PRODUCT'') and a.Fire_Protection_3 = ''SPRINK'' and ((SprinklerStandards = ''YES'' and SprinklerWaterType is not null) )) 
+		Or ( a.Channel in (''CALIBRE_BUSINESS_PACK_PRODUCT'', ''BIZCOVER_BUSINESS_PACK_PRODUCT'') and PercentSprinklerCoverage = 100 and (SprinklerStandards = ''YES'' and SprinklerWaterType is not null) )
+		
+		) then 1
 		 when a.Fire_Protection_1 is null and a.Fire_Protection_2 is null then 
 			Max_Loading_for_EXTING_REELS_CSO
 		when a.Fire_Protection_1 is null and a.Fire_Protection_2 is not null then 
-			EXTING_NONE_CSO
+			EXTING_NONE_CSO 
 		when a.Fire_Protection_1 is not null and a.Fire_Protection_2 is null then
 			REELS_NONE_CSO
 			else 1 end as Fire_Protection_Loading_Relativity_CSO
 	, case when a.Fire_Protection_0 = ''NONE'' or 
-		(a.Fire_Protection_3 = ''SPRINK'' and ((SprinklerStandards = ''YES'' and SprinklerWaterType is not null) )) then 1
+		( 
+			(a.Channel in (''STEADFAST_BUSINESS_PACK_PRODUCT'') and a.Fire_Protection_3 = ''SPRINK'' and ((SprinklerStandards = ''YES'' and SprinklerWaterType is not null) )) 
+		Or ( a.Channel in (''CALIBRE_BUSINESS_PACK_PRODUCT'', ''BIZCOVER_BUSINESS_PACK_PRODUCT'') and PercentSprinklerCoverage = 100 and (SprinklerStandards = ''YES'' and SprinklerWaterType is not null) )
+		
+		) then 1
 		 when a.Fire_Protection_1 is null and a.Fire_Protection_2 is null then 
 			Max_Loading_for_EXTING_REELS_Peril
 		when a.Fire_Protection_1 is null and a.Fire_Protection_2 is not null then 
 			EXTING_NONE_Peril
 			when a.Fire_Protection_1 is not null and a.Fire_Protection_2 is null then
-			REELS_NONE_Peril
+			REELS_NONE_Peril 
 			else 1 end as Fire_Protection_Loading_Relativity_Peril
 from OM_propety_2_temp_'+@suffix+'_'+@version+' a  
 )
@@ -1183,6 +1218,7 @@ From OM_property_2_temp2_'+@suffix+'_'+@version+' a
 ------------------------------------------------------------------------------
 ---Security Protection Rel - (3 mins)
 ------------------------------------------------------------------------------
+
 
 
 SET @PD_Emulation_Step7_A='
@@ -1417,110 +1453,122 @@ select
 		when a.Security_Protection_4 = ''WINDOWLOCKS'' then ''1''
 		else e6.value end as Windowlocks_None_Loading_Glass
 
+
+
+
+';
+
+SET @PD_Emulation_Step7_B='
 from CalibreSSiSdev.emula.OM_property_pre_2_'+@suffix+'_'+@version+' a 
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''NONE'','''',''Building'') b11
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''NONE'','''',''CSO'') b12
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''NONE'','''',''Peril'') b13
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''NONE'','''',''Theft'') b14
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''NONE'','''',''Money'') b15
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''NONE'','''',''Glass'') b16
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''LOCALALARM'','''',''Building'') b21
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''LOCALALARM'','''',''CSO'') b22
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''LOCALALARM'','''',''Peril'') b23
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''LOCALALARM'','''',''Theft'') b24
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''LOCALALARM'','''',''Money'') b25
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''LOCALALARM'','''',''Glass'') b26
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''BASEALARM'','''',''Building'') b31
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''BASEALARM'','''',''CSO'') b32
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''BASEALARM'','''',''Peril'') b33
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''BASEALARM'','''',''Theft'') b34
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''BASEALARM'','''',''Money'') b35
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''BASEALARM'','''',''Glass'') b36
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''WINDOWBARS'','''',''Building'') b41
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''WINDOWBARS'','''',''CSO'') b42
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''WINDOWBARS'','''',''Peril'') b43
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''WINDOWBARS'','''',''Theft'') b44
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''WINDOWBARS'','''',''Money'') b45
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''WINDOWBARS'','''',''Glass'') b46
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''WINDOWLOCKS'','''',''Building'') b51
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''WINDOWLOCKS'','''',''CSO'') b52
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''WINDOWLOCKS'','''',''Peril'') b53
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''WINDOWLOCKS'','''',''Theft'') b54
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''WINDOWLOCKS'','''',''Money'') b55
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''WINDOWLOCKS'','''',''Glass'') b56
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''DEADLOCKS'','''',''Building'') b61
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''DEADLOCKS'','''',''CSO'') b62
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''DEADLOCKS'','''',''Peril'') b63
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''DEADLOCKS'','''',''Theft'') b64
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''DEADLOCKS'','''',''Money'') b65
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''DEADLOCKS'','''',''Glass'') b66
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''DISPLAYWINDOW'','''',''Building'') b71
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''DISPLAYWINDOW'','''',''CSO'') b72
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''DISPLAYWINDOW'','''',''Peril'') b73
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''DISPLAYWINDOW'','''',''Theft'') b74
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''DISPLAYWINDOW'','''',''Money'') b75
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''DISPLAYWINDOW'','''',''Glass'') b76
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''LIGHTS'','''',''Building'') b81
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''LIGHTS'','''',''CSO'') b82
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''LIGHTS'','''',''Peril'') b83
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''LIGHTS'','''',''Theft'') b84
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''LIGHTS'','''',''Money'') b85
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''LIGHTS'','''',''Glass'') b86
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''BOLLARDS'','''',''Building'') b91
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''BOLLARDS'','''',''CSO'') b92
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''BOLLARDS'','''',''Peril'') b93
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''BOLLARDS'','''',''Theft'') b94
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''BOLLARDS'','''',''Money'') b95
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''BOLLARDS'','''',''Glass'') b96
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''CCTV'','''',''Building'') b101
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''CCTV'','''',''CSO'') b102
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''CCTV'','''',''Peril'') b103
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''CCTV'','''',''Theft'') b104
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''CCTV'','''',''Money'') b105
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''CCTV'','''',''Glass'') b106
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''FENCING'','''',''Building'') b111
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''FENCING'','''',''CSO'') b112
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''FENCING'','''',''Peril'') b113
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''FENCING'','''',''Theft'') b114
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''FENCING'','''',''Money'') b115
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''FENCING'','''',''Glass'') b116
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''PATROLS'','''',''Building'') b121
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''PATROLS'','''',''CSO'') b122
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''PATROLS'','''',''Peril'') b123
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''PATROLS'','''',''Theft'') b124
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''PATROLS'','''',''Money'') b125
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''PATROLS'','''',''Glass'') b126
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''KEYPAD'','''',''Building'') b131
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''KEYPAD'','''',''CSO'') b132
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''KEYPAD'','''',''Peril'') b133
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''KEYPAD'','''',''Theft'') b134
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''KEYPAD'','''',''Money'') b135
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''KEYPAD'','''',''Glass'') b136
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''SHUTTERS'','''',''Building'') b141
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''SHUTTERS'','''',''CSO'') b142
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''SHUTTERS'','''',''Peril'') b143
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''SHUTTERS'','''',''Theft'') b144
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''SHUTTERS'','''',''Money'') b145
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscount'',''SHUTTERS'','''',''Glass'') b146
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscountMin'','''','''',''Building'') c1
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscountMin'','''','''',''CSO'') c2
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscountMin'','''','''',''Peril'') c3
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscountMin'','''','''',''Theft'') c4
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscountMin'','''','''',''Money'') c5
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityDiscountMin'','''','''',''Glass'') c6
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityLoading'',''NODEADLOCKS'','''',''Building'') d1
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityLoading'',''NODEADLOCKS'','''',''CSO'') d2
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityLoading'',''NODEADLOCKS'','''',''Peril'') d3
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityLoading'',''NODEADLOCKS'','''',''Theft'') d4
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityLoading'',''NODEADLOCKS'','''',''Money'') d5
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityLoading'',''NODEADLOCKS'','''',''Glass'') d6
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityLoading'',''NOWINDOWLOCKS'','''',''Building'') e1
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityLoading'',''NOWINDOWLOCKS'','''',''CSO'') e2
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityLoading'',''NOWINDOWLOCKS'','''',''Peril'') e3
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityLoading'',''NOWINDOWLOCKS'','''',''Theft'') e4
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityLoading'',''NOWINDOWLOCKS'','''',''Money'') e5
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityLoading'',''NOWINDOWLOCKS'','''',''Glass'') e6
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''NONE'','''',''Building'') b11
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''NONE'','''',''CSO'') b12
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''NONE'','''',''Peril'') b13
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''NONE'','''',''Theft'') b14
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''NONE'','''',''Money'') b15
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''NONE'','''',''Glass'') b16
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''LOCALALARM'','''',''Building'') b21
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''LOCALALARM'','''',''CSO'') b22
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''LOCALALARM'','''',''Peril'') b23
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''LOCALALARM'','''',''Theft'') b24
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''LOCALALARM'','''',''Money'') b25
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''LOCALALARM'','''',''Glass'') b26
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''BASEALARM'','''',''Building'') b31
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''BASEALARM'','''',''CSO'') b32
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''BASEALARM'','''',''Peril'') b33
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''BASEALARM'','''',''Theft'') b34
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''BASEALARM'','''',''Money'') b35
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''BASEALARM'','''',''Glass'') b36
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''WINDOWBARS'','''',''Building'') b41
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''WINDOWBARS'','''',''CSO'') b42
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''WINDOWBARS'','''',''Peril'') b43
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''WINDOWBARS'','''',''Theft'') b44
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''WINDOWBARS'','''',''Money'') b45
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''WINDOWBARS'','''',''Glass'') b46
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''WINDOWLOCKS'','''',''Building'') b51
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''WINDOWLOCKS'','''',''CSO'') b52
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''WINDOWLOCKS'','''',''Peril'') b53
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''WINDOWLOCKS'','''',''Theft'') b54
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''WINDOWLOCKS'','''',''Money'') b55
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''WINDOWLOCKS'','''',''Glass'') b56
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''DEADLOCKS'','''',''Building'') b61
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''DEADLOCKS'','''',''CSO'') b62
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''DEADLOCKS'','''',''Peril'') b63
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''DEADLOCKS'','''',''Theft'') b64
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''DEADLOCKS'','''',''Money'') b65
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''DEADLOCKS'','''',''Glass'') b66
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''DISPLAYWINDOW'','''',''Building'') b71
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''DISPLAYWINDOW'','''',''CSO'') b72
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''DISPLAYWINDOW'','''',''Peril'') b73
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''DISPLAYWINDOW'','''',''Theft'') b74
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''DISPLAYWINDOW'','''',''Money'') b75
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''DISPLAYWINDOW'','''',''Glass'') b76
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''LIGHTS'','''',''Building'') b81
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''LIGHTS'','''',''CSO'') b82
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''LIGHTS'','''',''Peril'') b83
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''LIGHTS'','''',''Theft'') b84
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''LIGHTS'','''',''Money'') b85
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''LIGHTS'','''',''Glass'') b86
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''BOLLARDS'','''',''Building'') b91
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''BOLLARDS'','''',''CSO'') b92
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''BOLLARDS'','''',''Peril'') b93
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''BOLLARDS'','''',''Theft'') b94
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''BOLLARDS'','''',''Money'') b95
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''BOLLARDS'','''',''Glass'') b96
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''CCTV'','''',''Building'') b101
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''CCTV'','''',''CSO'') b102
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''CCTV'','''',''Peril'') b103
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''CCTV'','''',''Theft'') b104
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''CCTV'','''',''Money'') b105
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''CCTV'','''',''Glass'') b106
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''FENCING'','''',''Building'') b111
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''FENCING'','''',''CSO'') b112
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''FENCING'','''',''Peril'') b113
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''FENCING'','''',''Theft'') b114
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''FENCING'','''',''Money'') b115
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''FENCING'','''',''Glass'') b116
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''PATROLS'','''',''Building'') b121
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''PATROLS'','''',''CSO'') b122
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''PATROLS'','''',''Peril'') b123
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''PATROLS'','''',''Theft'') b124
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''PATROLS'','''',''Money'') b125
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''PATROLS'','''',''Glass'') b126
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''KEYPAD'','''',''Building'') b131
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''KEYPAD'','''',''CSO'') b132
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''KEYPAD'','''',''Peril'') b133
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''KEYPAD'','''',''Theft'') b134
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''KEYPAD'','''',''Money'') b135
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''KEYPAD'','''',''Glass'') b136
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''SHUTTERS'','''',''Building'') b141
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''SHUTTERS'','''',''CSO'') b142
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''SHUTTERS'','''',''Peril'') b143
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''SHUTTERS'','''',''Theft'') b144
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''SHUTTERS'','''',''Money'') b145
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscount'',''SHUTTERS'','''',''Glass'') b146
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscountMin'','''','''',''Building'') c1
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscountMin'','''','''',''CSO'') c2
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscountMin'','''','''',''Peril'') c3
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscountMin'','''','''',''Theft'') c4
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscountMin'','''','''',''Money'') c5
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityDiscountMin'','''','''',''Glass'') c6
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityLoading'',''NODEADLOCKS'','''',''Building'') d1
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityLoading'',''NODEADLOCKS'','''',''CSO'') d2
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityLoading'',''NODEADLOCKS'','''',''Peril'') d3
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityLoading'',''NODEADLOCKS'','''',''Theft'') d4
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityLoading'',''NODEADLOCKS'','''',''Money'') d5
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityLoading'',''NODEADLOCKS'','''',''Glass'') d6
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityLoading'',''NOWINDOWLOCKS'','''',''Building'') e1
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityLoading'',''NOWINDOWLOCKS'','''',''CSO'') e2
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityLoading'',''NOWINDOWLOCKS'','''',''Peril'') e3
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityLoading'',''NOWINDOWLOCKS'','''',''Theft'') e4
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityLoading'',''NOWINDOWLOCKS'','''',''Money'') e5
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityLoading'',''NOWINDOWLOCKS'','''',''Glass'') e6
 	),
+
+
+'
+;
+
+SET @PD_Emulation_Step7_C='
 
 property_pre_3_temp2_'+@suffix+'_'+@version+' as (
 select 
@@ -1558,21 +1606,18 @@ select
 	 from (values (cast(f6.value as numeric(15,5))),(cast(a.deadlocks_none_loading_Glass as numeric(15,5)) * 
 			cast(a.Windowlocks_None_Loading_glass as numeric(15,5)))) b(max_rel)
 	) end as Max_Loading_DEADLOCKS_Windowlocks_Glass  --as SP_Loading_Rel_Glass
-';
-
-SET @PD_Emulation_Step7_B='
 
 from property_pre_3_temp_'+@suffix+'_'+@version+' a 
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityLoadingMax'','''','''',''Building'') f1
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityLoadingMax'','''','''',''CSO'') f2
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityLoadingMax'','''','''',''Peril'') f3
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityLoadingMax'','''','''',''Theft'') f4
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityLoadingMax'','''','''',''Money'') f5
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''PhysicalSecurityLoadingMax'','''','''',''Glass'') f6
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityLoadingMax'','''','''',''Building'') f1
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityLoadingMax'','''','''',''CSO'') f2
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityLoadingMax'','''','''',''Peril'') f3
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityLoadingMax'','''','''',''Theft'') f4
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityLoadingMax'','''','''',''Money'') f5
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''PhysicalSecurityLoadingMax'','''','''',''Glass'') f6
 )
 select 
 	a.*
-	, case when a.Security_Protection_0 = ''NONE'' then 1
+	, case when a.Security_Protection_1_to_13 = 0 or a.Security_Protection_0 = ''NONE'' then 1
 		 when a.Security_Protection_4 is null and a.Security_Protection_5 is null then 
 			Max_Loading_DEADLOCKS_Windowlocks_Building
 		when a.Security_Protection_4 is null and a.Security_Protection_5 is not null then 
@@ -1580,7 +1625,7 @@ select
 		when a.Security_Protection_4 is not null and a.Security_Protection_5 is null then
 			deadlocks_None_Loading_Building
 			else 1 end as SP_Loading_Rel_Building
-	, case when a.Security_Protection_0 = ''NONE'' then 1
+	, case when a.Security_Protection_1_to_13 = 0 or a.Security_Protection_0 = ''NONE'' then 1
 		 when a.Security_Protection_4 is null and a.Security_Protection_5 is null then 
 			Max_Loading_DEADLOCKS_Windowlocks_cso
 		when a.Security_Protection_4 is null and a.Security_Protection_5 is not null then 
@@ -1588,7 +1633,7 @@ select
 		when a.Security_Protection_4 is not null and a.Security_Protection_5 is null then
 			deadlocks_None_Loading_cso
 			else 1 end as SP_Loading_Rel_cso
-	, case when a.Security_Protection_0 = ''NONE'' then 1
+	, case when a.Security_Protection_1_to_13 = 0 or a.Security_Protection_0 = ''NONE'' then 1
 		 when a.Security_Protection_4 is null and a.Security_Protection_5 is null then 
 			Max_Loading_DEADLOCKS_Windowlocks_peril
 		when a.Security_Protection_4 is null and a.Security_Protection_5 is not null then 
@@ -1596,7 +1641,7 @@ select
 		when a.Security_Protection_4 is not null and a.Security_Protection_5 is null then
 			deadlocks_None_Loading_peril
 			else 1 end as SP_Loading_Rel_peril
-	, case when a.Security_Protection_0 = ''NONE'' then 1
+	, case when a.Security_Protection_1_to_13 = 0 or a.Security_Protection_0 = ''NONE'' then 1
 		 when a.Security_Protection_4 is null and a.Security_Protection_5 is null then 
 			Max_Loading_DEADLOCKS_Windowlocks_theft
 		when a.Security_Protection_4 is null and a.Security_Protection_5 is not null then 
@@ -1604,7 +1649,8 @@ select
 		when a.Security_Protection_4 is not null and a.Security_Protection_5 is null then
 			deadlocks_None_Loading_theft
 			else 1 end as SP_Loading_Rel_theft
-	, case when a.Security_Protection_0 = ''NONE'' then 1
+
+	, case when a.Security_Protection_1_to_13 = 0 or a.Security_Protection_0 = ''NONE'' then 1
 		 when a.Security_Protection_4 is null and a.Security_Protection_5 is null then 
 			Max_Loading_DEADLOCKS_Windowlocks_money
 		when a.Security_Protection_4 is null and a.Security_Protection_5 is not null then 
@@ -1612,7 +1658,7 @@ select
 		when a.Security_Protection_4 is not null and a.Security_Protection_5 is null then
 			deadlocks_None_Loading_money
 			else 1 end as SP_Loading_Rel_money
-	, case when a.Security_Protection_0 = ''NONE'' then 1
+	, case when a.Security_Protection_1_to_13 = 0 or a.Security_Protection_0 = ''NONE'' then 1
 		 when a.Security_Protection_4 is null and a.Security_Protection_5 is null then 
 			Max_Loading_DEADLOCKS_Windowlocks_glass
 		when a.Security_Protection_4 is null and a.Security_Protection_5 is not null then 
@@ -1620,6 +1666,15 @@ select
 		when a.Security_Protection_4 is not null and a.Security_Protection_5 is null then
 			deadlocks_None_Loading_glass
 			else 1 end as SP_Loading_Rel_glass
+
+
+
+'
+;
+
+
+SET @PD_Emulation_Step7_D='
+
 	, case when a.Security_Protection_1 = ''LOCALALARM'' then g2.value --''Alarm'',''LOCALONLY''
 			else g1.value end as SP_1_Alarm_Building --''Alarm'',''NOALARM'',
 	, case when a.Security_Protection_1 = ''LOCALALARM'' then h2.value 
@@ -1642,25 +1697,22 @@ select
 			else k1.value end as SP_2_Alarm_Money
 into CalibreSSiSdev.emula.OM_property_pre_3_temp_'+@suffix+'_'+@version+'
 from property_pre_3_temp2_'+@suffix+'_'+@version+' a
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''NOALARM'','''',''Building'') g1
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''LOCALONLY'','''',''Building'') g2
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''MONITORONLY'',a.MonitoredBaseAlarmType,''Building'') g3
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''NOALARM'','''',''CSO'') h1
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''LOCALONLY'','''',''CSO'') h2
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''MONITORONLY'',a.MonitoredBaseAlarmType,''CSO'') h3
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''NOALARM'','''',''Peril'') i1
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''LOCALONLY'','''',''Peril'') i2
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''MONITORONLY'',a.MonitoredBaseAlarmType,''Peril'') i3
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''NOALARM'','''',''Theft'') j1
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''LOCALONLY'','''',''Theft'') j2
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''MONITORONLY'',a.MonitoredBaseAlarmType,''Theft'') j3
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''NOALARM'','''',''Money'') k1
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''LOCALONLY'','''',''Money'') k2
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''MONITORONLY'',a.MonitoredBaseAlarmType,''Money'') k3
-;'
-;
-
-SET @PD_Emulation_Step7_C='
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''NOALARM'','''',''Building'') g1
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''LOCALONLY'','''',''Building'') g2
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''MONITORONLY'',a.MonitoredBaseAlarmType,''Building'') g3
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''NOALARM'','''',''CSO'') h1
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''LOCALONLY'','''',''CSO'') h2
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''MONITORONLY'',a.MonitoredBaseAlarmType,''CSO'') h3
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''NOALARM'','''',''Peril'') i1
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''LOCALONLY'','''',''Peril'') i2
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''MONITORONLY'',a.MonitoredBaseAlarmType,''Peril'') i3
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''NOALARM'','''',''Theft'') j1
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''LOCALONLY'','''',''Theft'') j2
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''MONITORONLY'',a.MonitoredBaseAlarmType,''Theft'') j3
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''NOALARM'','''',''Money'') k1
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''LOCALONLY'','''',''Money'') k2
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''MONITORONLY'',a.MonitoredBaseAlarmType,''Money'') k3
+	;
 
 drop table if exists  CalibreSSiSdev.emula.OM_property_pre_3_'+@suffix+'_'+@version+';
 
@@ -1717,6 +1769,13 @@ select
 		cast(SP_7_Money as numeric(15,5)) *cast(SP_8_Money as numeric(15,5)) *
 		cast(SP_9_Money as numeric(15,5)) *cast(SP_10_Money as numeric(15,5)) *
 		cast(SP_11_Money as numeric(15,5)) *cast(SP_12_Money as numeric(15,5)) * cast(SP_13_Money as numeric(15,5)) as SP_Money_Rel
+
+
+'
+;
+
+SET @PD_Emulation_Step7_E='
+
 	, cast(SP_1_Glass as numeric(15,5)) * cast(SP_2_Glass as numeric(15,5)) *
 		cast(SP_3_Glass as numeric(15,5)) *cast(SP_4_Glass as numeric(15,5)) *
 		cast(SP_5_Glass as numeric(15,5)) *cast(SP_6_Glass as numeric(15,5)) *
@@ -1724,12 +1783,13 @@ select
 		cast(SP_9_Glass as numeric(15,5)) *cast(SP_10_Glass as numeric(15,5)) *
 		cast(SP_11_Glass as numeric(15,5)) *cast(SP_12_Glass as numeric(15,5)) * cast(SP_13_Glass as numeric(15,5)) as SP_Glass_Rel
  from CalibreSSiSdev.emula.OM_property_pre_3_temp_'+@suffix+'_'+@version+' a 
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''LOCALMONITOR'',a.MonitoredBaseAlarmType,''Building'') g1
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''LOCALMONITOR'',a.MonitoredBaseAlarmType,''CSO'') g2
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''LOCALMONITOR'',a.MonitoredBaseAlarmType,''Peril'') g3
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''LOCALMONITOR'',a.MonitoredBaseAlarmType,''Theft'') g4
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''Alarm'',''LOCALMONITOR'',a.MonitoredBaseAlarmType,''Money'') g5
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''LOCALMONITOR'',a.MonitoredBaseAlarmType,''Building'') g1
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''LOCALMONITOR'',a.MonitoredBaseAlarmType,''CSO'') g2
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''LOCALMONITOR'',a.MonitoredBaseAlarmType,''Peril'') g3
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''LOCALMONITOR'',a.MonitoredBaseAlarmType,''Theft'') g4
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''Alarm'',''LOCALMONITOR'',a.MonitoredBaseAlarmType,''Money'') g5
 ),
+
 temp4_'+@suffix+'_'+@version+' as (
 select 
 	a.*
@@ -1761,11 +1821,47 @@ select
 	, comb_rel_theft * SP_Loading_Rel_theft as SP_Combind_Rel_theft
 	, comb_rel_money * SP_Loading_Rel_money as SP_Combind_Rel_money
 	, comb_rel_glass * SP_Loading_Rel_glass as SP_Combind_Rel_glass
+
+	, Case When ((a.Category = ''Non_PO'' and a.OSQ107_Count is NULL) Or (a.Category = ''PO'' and OSQ107_Count in (NULL,0))) and a.Fire_Class < 8 Then Coalesce(Cast(j2.int_property_a as float),1) Else 1 End As SprayPainting_Rel
+	, Case When ((a.Category = ''Non_PO'' and a.OSQ100_Count is NULL) Or (a.Category = ''PO'' and OSQ100_Count in (NULL,0))) and a.Fire_Class < 8 and Deepfryers in (''DEEPFRY'', ''BOTH'', ''WOK'') Then Coalesce(Cast(j3.int_property_a as float),1) Else 1 End As DeepFryers_Rel
+	, Case When ((a.Category = ''Non_PO'' and a.OSQ112A_Count is NULL) Or (a.Category = ''PO'' and OSQ112B_Count in (NULL,0) and OSQ112A_Count > 0)) and a.DeepFryersOilVolume > 10 Then Coalesce(Cast(j4.int_property_a as float),1) Else 1 End As DeepFryersOilVolume_Rel
+	, Case When ((a.Category = ''Non_PO'' and a.OSQ104_Count is NULL) Or (a.Category = ''PO'' and OSQ104_Count in (NULL,0))) and a.Fire_Class < 9 Then Coalesce(Cast(j5.int_property_a as float),1) Else 1 End As PlasticsMoulding_Rel
+	, Coalesce(Cast(j6.int_property_a as float),1) As StorageHeight_Rel
+	, Coalesce(Cast(j7.int_property_a as float),1) As ManufacturingPercentage_Rel
+	, Coalesce(Cast(j8.int_property_a as float),1) As FibreGlassWork_Rel
+	, Coalesce(Cast(j9.int_property_a as float),1) As WashFacility_Rel
+	, Coalesce(Cast(j10.int_property_a as float),1) As RepairServicePremises_Rel
+	, Case When ((a.Category = ''Non_PO'' and a.OSQ99_Count is NULL) Or (a.Category = ''PO'' and OSQ99_Count in (NULL,0))) and a.Fire_Class < 8 and (RestaurantorBar in (''REST'', ''BAR'', ''BOTH'')) Then Coalesce(Cast(j11.int_property_a as float),1) Else 1 End As RestaurantorBar_Rel
+	, Case When ((a.Category = ''Non_PO'' and a.OSQ111_Count is NULL) Or (a.Category = ''PO'' and OSQ111_Count in (NULL,0))) and a.Fire_Class < 8 Then Coalesce(Cast(j12.int_property_a as float),1) Else 1 End As Woodworking_Rel
+	, Coalesce(Cast(j13.int_property_a as float),1) As WoodworkingDustExtractorClean_Rel
+	, Coalesce(Cast(j14.int_property_a as float),1) As SprayPaintingControl_Rel
+	, Coalesce(Cast(j15.int_property_a as float),1) As WasteRemovalProcess_Rel
+	, Coalesce(Cast(j16.int_property_a as float),1) As TimberStorageYard_Rel
+	, Coalesce(Cast(j17.int_property_a as float),1) As StorageWarehouse_Rel
+	, Coalesce(Cast(j18.int_property_a as float),1) As WoodworkingDustExtractors_Rel
+
 into CalibreSSiSdev.emula.OM_property_pre_3_'+@suffix+'_'+@version+'
 from temp4_'+@suffix+'_'+@version+' a
+	 left join CalibreSSiSdev.dbo.ccomm_data_'+@suffix+'_'+@version+' j2 on UPPER(j2.code) = a.SprayPainting and j2.groupid = ''OSQ107'' and j2.Current_Flag = ''YES''------new row added in
+	 left join CalibreSSiSdev.dbo.ccomm_data_'+@suffix+'_'+@version+' j3 on UPPER(j3.code) = a.DeepFryers and j3.groupid = ''OSQ100'' and j3.Current_Flag = ''YES''------new row added in
+	 left join CalibreSSiSdev.dbo.ccomm_data_'+@suffix+'_'+@version+' j4 on UPPER(j4.code) = ''RATE'' and j4.groupid = ''OSQ112'' and j4.Current_Flag = ''YES'' ------new row added in
+	 left join CalibreSSiSdev.dbo.ccomm_data_'+@suffix+'_'+@version+' j5 on UPPER(j5.code) = a.PlasticsMoulding and j5.groupid = ''OSQ104'' and j5.Current_Flag = ''YES''------new row added in
+	 left join CalibreSSiSdev.dbo.ccomm_data_'+@suffix+'_'+@version+' j6 on UPPER(j6.code) = a.StorageHeight and j6.groupid = ''OSQ110'' and j6.Current_Flag = ''YES'' ------new row added in
+	 left join CalibreSSiSdev.dbo.ccomm_data_'+@suffix+'_'+@version+' j7 on UPPER(j7.code) = a.ManufacturingPercentage and j7.groupid = ''OSQ11'' and j7.Current_Flag = ''YES'' and j7.version < 280------new row added in
+	 left join CalibreSSiSdev.dbo.ccomm_data_'+@suffix+'_'+@version+' j8 on UPPER(j8.code) = a.FibreGlassWork and j8.groupid = ''OSQ26'' and j8.Current_Flag = ''YES'' and j8.version < 500------new row added in
+	 left join CalibreSSiSdev.dbo.ccomm_data_'+@suffix+'_'+@version+' j9 on UPPER(j9.code) = a.WashFacility and j9.groupid = ''OSQ12.1'' and j9.Current_Flag = ''YES'' and j9.version < 285------new row added in
+	 left join CalibreSSiSdev.dbo.ccomm_data_'+@suffix+'_'+@version+' j10 on UPPER(j10.code) = a.RepairServicePremises and j10.groupid = ''OSQ50'' and j10.Current_Flag = ''YES'' and j10.version < 500 ------new row added in
+	 left join CalibreSSiSdev.dbo.ccomm_data_'+@suffix+'_'+@version+' j11 on UPPER(j11.code) = a.RestaurantorBar and j11.groupid = ''OSQ99'' and j11.Current_Flag = ''YES'' ------new row added in
+	 left join CalibreSSiSdev.dbo.ccomm_data_'+@suffix+'_'+@version+' j12 on UPPER(j12.code) = a.Woodworking and j12.groupid = ''OSQ111'' and j12.Current_Flag = ''YES'' ------new row added in
+	 left join CalibreSSiSdev.dbo.ccomm_data_'+@suffix+'_'+@version+' j13 on UPPER(j13.code) = a.WoodworkingDustExtractorCleaning and j13.groupid = ''OSQ97'' and j13.Current_Flag = ''YES'' ------new row added in
+	 left join CalibreSSiSdev.dbo.ccomm_data_'+@suffix+'_'+@version+' j14 on UPPER(j14.code) = a.SprayPaintingControl and j14.groupid = ''OSQ94'' and j14.Current_Flag = ''YES'' ------new row added in
+	 left join CalibreSSiSdev.dbo.ccomm_data_'+@suffix+'_'+@version+' j15 on UPPER(j15.code) = a.WasteRemovalProcess and j15.groupid = ''OSQ93'' and j15.Current_Flag = ''YES'' ------new row added in
+	 left join CalibreSSiSdev.dbo.ccomm_data_'+@suffix+'_'+@version+' j16 on UPPER(j16.code) = a.TimberStorageYard and j16.groupid = ''OSQ32'' and j16.Current_Flag = ''YES'' and j16.version > 400 ------new row added in
+	 left join CalibreSSiSdev.dbo.ccomm_data_'+@suffix+'_'+@version+' j17 on UPPER(j17.code) = a.StorageWarehouse and j17.groupid = ''OSQ35'' and j17.Current_Flag = ''YES'' and j17.version < 500------new row added in
+	 left join CalibreSSiSdev.dbo.ccomm_data_'+@suffix+'_'+@version+' j18 on UPPER(j18.code) = a.WoodworkingDustExtractors and j18.groupid = ''OSQ97'' and j18.Current_Flag = ''YES'' ------new row added in
+
 ;'
 ;
-
 
 
 
@@ -1832,13 +1928,10 @@ select
 	, i2.value as Multi_situation_Rel_CSO
 	, i3.value as Multi_situation_Rel_Peril
 
-	, Coalesce(Cast(j2.value as float),1) AS SprayPainting_Rel
-	, Coalesce(Cast(j3.value as float),1) As DeepFryers_Rel
-	, Coalesce(Cast(j4.value as float),1) As DeepFryersExhaustSystem_Rel
-	, Coalesce(Cast(j5.value as float),1) As PlasticsMoulding_Rel
-	, Coalesce(Cast(j6.value as float),1) As DeepFryersThermostat_Rel
-	, Coalesce(Cast(j7.value as float),1) AS PropertyDustExtractorFitted_Rel
-	, Coalesce(Cast(j2.value as float),1) * Coalesce(Cast(j3.value as float),1) *  Coalesce(Cast(j4.value as float),1)*  Coalesce(Cast(j5.value as float),1) *  Coalesce(Cast(j6.value as float),1) *  Coalesce(Cast(j7.value as float),1) *  Coalesce(Cast(j8.value as float),1)*  Coalesce(Cast(j9.value as float),1) *  Coalesce(Cast(j10.value as float),1) as Calliden_OSQ_Rel
+	, Case When Channel in (''CALIBRE_BUSINESS_PACK_PRODUCT'', ''BIZCOVER_BUSINESS_PACK_PRODUCT'') Then 1	
+		When Channel = ''STEADFAST_BUSINESS_PACK_PRODUCT'' Then 
+		SprayPainting_Rel * DeepFryers_Rel * DeepFryersOilVolume_Rel * PlasticsMoulding_Rel * StorageHeight_Rel * ManufacturingPercentage_Rel * FibreGlassWork_Rel * WashFacility_Rel * RepairServicePremises_Rel * RestaurantorBar_Rel * Woodworking_Rel * WoodworkingDustExtractorClean_Rel * SprayPaintingControl_Rel * WasteRemovalProcess_Rel * TimberStorageYard_Rel * StorageWarehouse_Rel * WoodworkingDustExtractors_Rel
+		Else 1 End As Calliden_OSQ_Rel
 
 '
 ;
@@ -1847,50 +1940,43 @@ SET @PD_Emulation_Step8_B='
 into CalibreSSiSdev.emula.OM_property_pre_4_temp_'+@suffix+'_'+@version+'
 from CalibreSSiSdev.emula.OM_property_pre_3_'+@suffix+'_'+@version+' a 
 
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''TownWaterSupply'',coalesce(a.ConnectedTownWater,''NO''),'''',''Building'') b1
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''TownWaterSupply'',coalesce(a.ConnectedTownWater,''NO''),'''',''CSO'') b2
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''TownWaterSupply'',coalesce(a.ConnectedTownWater,''NO''),'''',''Peril'') b3
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''FireBrigade'',a.firebrigade,'''',''Building'') c1
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''FireBrigade'',a.firebrigade,'''',''CSO'') c2
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''FireBrigade'',a.firebrigade,'''',''Peril'') c3
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''ATM'',a.AtmOnPremises,'''',''Building'') d1
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''ATM'',a.AtmOnPremises,'''',''CSO'') d2
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''ATM'',a.AtmOnPremises,'''',''Peril'') d3
-	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER3_core_'+@suffix+'_'+@version+'(''StorageOfFlammableGoods'','''','''',''Building'',a.FlammableGoodsQuantity) e1
-	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER3_core_'+@suffix+'_'+@version+'(''StorageOfFlammableGoods'','''','''',''CSO'',a.FlammableGoodsQuantity) e2
-	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER3_core_'+@suffix+'_'+@version+'(''StorageOfFlammableGoods'','''','''',''Peril'',a.FlammableGoodsQuantity) e3
-	left join (select * from CalibreSSiSdev.dbo.ccomm_data_'+@suffix+'_'+@version+' 
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''TownWaterSupply'',coalesce(a.ConnectedTownWater,''YES''),'''',''Building'') b1
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''TownWaterSupply'',coalesce(a.ConnectedTownWater,''YES''),'''',''CSO'') b2
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''TownWaterSupply'',coalesce(a.ConnectedTownWater,''YES''),'''',''Peril'') b3
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''FireBrigade'',a.firebrigade,'''',''Building'') c1
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''FireBrigade'',a.firebrigade,'''',''CSO'') c2
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''FireBrigade'',a.firebrigade,'''',''Peril'') c3
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''ATM'',a.AtmOnPremises,'''',''Building'') d1
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''ATM'',a.AtmOnPremises,'''',''CSO'') d2
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''ATM'',a.AtmOnPremises,'''',''Peril'') d3
+	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER3_final(''StorageOfFlammableGoods'','''','''',''Building'',a.FlammableGoodsQuantity) e1
+	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER3_final(''StorageOfFlammableGoods'','''','''',''CSO'',a.FlammableGoodsQuantity) e2
+	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER3_final(''StorageOfFlammableGoods'','''','''',''Peril'',a.FlammableGoodsQuantity) e3
+	left join (select * from CalibreSSiSdev.dbo.ccomm_data_final
 	 where groupid = ''StorageOfFlammableGoodsException'' and CURRENT_FLAG = ''YES'') ee --added in 2022
 	 on a.ANZSIC collate database_default = ee.code 
 		or a.Tenant1_Occ collate database_default = ee.code  
 		or a.Tenant2_Occ collate database_default = ee.code  
 		or a.Tenant3_Occ collate database_default = ee.code 
-		or a.Tenant4_Occ collate database_default = ee.code  
+		or a.Tenant4_Occ collate database_default = ee.code 
 		or a.Tenant5_Occ collate database_default = ee.code  
 		or a.Tenant6_Occ collate database_default = ee.code 
 		or a.Tenant7_Occ collate database_default = ee.code 
-	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''MultipleBuildings'',a.HasMultipleBuildings,'''',''Building'') f1
-	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''MultipleBuildings'',a.HasMultipleBuildings,'''',''CSO'') f2
-	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''MultipleBuildings'',a.HasMultipleBuildings,'''',''Peril'') f3
-	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''EPS'',a.EPSAmount,'''',''Building'') g1
-	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''EPS'',a.EPSAmount,'''',''CSO'') g2
-	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''EPS'',a.EPSAmount,'''',''Peril'') g3
-	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_LOWER_UPPER_core_'+@suffix+'_'+@version+'(''NumberOfStories'','''','''',''Building'',a.NumberOfStories) h1
-	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_LOWER_UPPER_core_'+@suffix+'_'+@version+'(''NumberOfStories'','''','''',''CSO'',a.NumberOfStories) h2
-	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_LOWER_UPPER_core_'+@suffix+'_'+@version+'(''NumberOfStories'','''','''',''Peril'',a.NumberOfStories) h3
-	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_LOWER_UPPER_core_'+@suffix+'_'+@version+'(''NoofLocations'','''',''NoofLocations'',''Building'',a.situation_count) i1
-	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_LOWER_UPPER_core_'+@suffix+'_'+@version+'(''NoofLocations'','''',''NoofLocations'',''CSO'',a.situation_count) i2
-	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_LOWER_UPPER_core_'+@suffix+'_'+@version+'(''NoofLocations'','''',''NoofLocations'',''Peril'',a.situation_count) i3
+	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''MultipleBuildings'',a.HasMultipleBuildings,'''',''Building'') f1
+	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''MultipleBuildings'',a.HasMultipleBuildings,'''',''CSO'') f2
+	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''MultipleBuildings'',a.HasMultipleBuildings,'''',''Peril'') f3
+	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''EPS'',a.EPSAmount,'''',''Building'') g1
+	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''EPS'',a.EPSAmount,'''',''CSO'') g2
+	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''EPS'',a.EPSAmount,'''',''Peril'') g3
+	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_LOWER_UPPER_final(''NumberOfStories'','''','''',''Building'',a.NumberOfStories) h1
+	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_LOWER_UPPER_final(''NumberOfStories'','''','''',''CSO'',a.NumberOfStories) h2
+	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_LOWER_UPPER_final(''NumberOfStories'','''','''',''Peril'',a.NumberOfStories) h3
+	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_LOWER_UPPER_final(''NoofLocations'','''',''NoofLocations'',''Building'',a.situation_count) i1
+	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_LOWER_UPPER_final(''NoofLocations'','''',''NoofLocations'',''CSO'',a.situation_count) i2
+	 outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_LOWER_UPPER_final(''NoofLocations'','''',''NoofLocations'',''Peril'',a.situation_count) i3
 
-	 outer apply CalibreSSiSdev.dbo.[EMULA_SDP_DATA_'+@suffix+'_'+@version+'](''xpr.SprayPainting'',a.SprayPainting) j2 ------new row added in
-	 outer apply CalibreSSiSdev.dbo.[EMULA_SDP_DATA_'+@suffix+'_'+@version+'](''xpr.DeepFryers'',a.DeepFryers) j3 ------new row added in
-	 outer apply CalibreSSiSdev.dbo.[EMULA_SDP_DATA_'+@suffix+'_'+@version+'](''xpr.DeepFryersExhaustSystem'',a.DeepFryersExhaustSystem) j4 ------new row added in
-	 outer apply CalibreSSiSdev.dbo.[EMULA_SDP_DATA_'+@suffix+'_'+@version+'](''xpr.PlasticsMoulding'',a.PlasticsMoulding) j5 ------new row added in
-	 outer apply CalibreSSiSdev.dbo.[EMULA_SDP_DATA_'+@suffix+'_'+@version+'](''xpr.DeepFryersThermostat'',a.DeepFryersThermostat) j6 ------new row added in
-	 outer apply CalibreSSiSdev.dbo.[EMULA_SDP_DATA_'+@suffix+'_'+@version+'](''xpr.PropertyDustExtractorFitted'',a.PropertyDustExtractorFitted) j7 ------new row added in
-	 outer apply CalibreSSiSdev.dbo.[EMULA_SDP_DATA_'+@suffix+'_'+@version+'](''xpr.UnattendedEquipmentOperation'',a.UnattendedEquipmentOperation) j8 ------new row added in
-	 outer apply CalibreSSiSdev.dbo.[EMULA_SDP_DATA_'+@suffix+'_'+@version+'](''xpr.StorageHeight'',a.StorageHeight) j9 ------new row added in
-	 outer apply CalibreSSiSdev.dbo.[EMULA_SDP_DATA_'+@suffix+'_'+@version+'](''xpr.PropertyDustExtractorCleaned'',a.PropertyDustExtractorCleaned) j10 ------new row added in
+
+
 ;'
 ;
 
@@ -1954,51 +2040,52 @@ select
 	, ''1'' as FireOnly_Rel_building --comment out in
 	, ''1'' as FireOnly_Rel_CSO --comment out in
 
+
 into CalibreSSiSdev.emula.OM_property_pre_4_'+@suffix+'_'+@version+'
 from CalibreSSiSdev.emula.OM_property_pre_4_temp_'+@suffix+'_'+@version+' a 
-	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER2_core_'+@suffix+'_'+@version+'(''LimitofLiability'','''','''','''',a.limit_of_liability_ratio) b1
-	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER_core_'+@suffix+'_'+@version+'(''RewiredAge'','''','''',''CSO'',a.RewiredAge) c2
-	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER_core_'+@suffix+'_'+@version+'(''RewiredYear'','''','''',''Building'',a.YearRewired) c11
-	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER_core_'+@suffix+'_'+@version+'(''RewiredYear'','''','''',''CSO'',a.YearRewired) c22
+	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER2_final(''LimitofLiability'','''','''','''',a.limit_of_liability_ratio) b1
+	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER_final(''RewiredAge'','''','''',''CSO'',a.RewiredAge) c2
+	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER_final(''RewiredYear'','''','''',''Building'',a.YearRewired) c11
+	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER_final(''RewiredYear'','''','''',''CSO'',a.YearRewired) c22
 
-	left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' d1
+	left join CalibreSSiSdev.dbo.ccomm_occupation_final d1
 		on a.Tenant1_Occ = cast(d1.calliden_code as varchar) collate SQL_Latin1_General_CP1_CI_AS
 		and d1.CURRENT_FLAG = ''YES'' 
-	left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' d2
+	left join CalibreSSiSdev.dbo.ccomm_occupation_final d2
 		on a.Tenant2_Occ = cast(d2.calliden_code as varchar) collate SQL_Latin1_General_CP1_CI_AS
 		and d2.CURRENT_FLAG = ''YES'' 
-	left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' d3
+	left join CalibreSSiSdev.dbo.ccomm_occupation_final d3
 		on a.Tenant3_Occ =cast( d3.calliden_code as varchar) collate SQL_Latin1_General_CP1_CI_AS
 		and d3.CURRENT_FLAG = ''YES''
-	left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' d4
+	left join CalibreSSiSdev.dbo.ccomm_occupation_final d4
 		on a.Tenant4_Occ = cast(d4.calliden_code as varchar) collate SQL_Latin1_General_CP1_CI_AS
 		and d4.CURRENT_FLAG = ''YES'' 
-	left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' d5 
+	left join CalibreSSiSdev.dbo.ccomm_occupation_final d5 
 		on a.Tenant5_Occ = cast(d5.calliden_code as varchar) collate SQL_Latin1_General_CP1_CI_AS
 		and d5.CURRENT_FLAG = ''YES''
-	left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' d6
+	left join CalibreSSiSdev.dbo.ccomm_occupation_final d6
 		on a.Tenant6_Occ = cast(d6.calliden_code as varchar) collate SQL_Latin1_General_CP1_CI_AS
 		and d6.CURRENT_FLAG = ''YES''
-	left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' d7
+	left join CalibreSSiSdev.dbo.ccomm_occupation_final d7
 		on a.Tenant7_Occ =cast( d7.calliden_code as varchar) collate SQL_Latin1_General_CP1_CI_AS
 		and d7.CURRENT_FLAG = ''YES''
 
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_LOWER_UPPER2_core_'+@suffix+'_'+@version+'(''MultiTenantHighHazard'','''','''','''',cast(a.tenant_count as numeric(15,5))) de
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''HeritageListed'',a.IsHeritageListed,'''',''CSO'') e1
-	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_core_'+@suffix+'_'+@version+'(''HeritageListedBuilding'',a.IsHeritageListed,'''',''Building'') e2 ------new row added in
-	left join CalibreSSiSdev.dbo.ccomm_freecovers_'+@suffix+'_'+@version+'  f1
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_LOWER_UPPER2_final(''MultiTenantHighHazard'','''','''','''',cast(a.tenant_count as numeric(15,5))) de
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''HeritageListed'',a.IsHeritageListed,'''',''CSO'') e1
+	outer apply CalibreSSiSdev.dbo.EMULA_SDP_BUSINESSPROPERTY_final(''HeritageListedBuilding'',a.IsHeritageListed,'''',''Building'') e2 ------new row added in
+	left join CalibreSSiSdev.dbo.ccomm_freecovers_final  f1
 		on f1.section = ''Fire'' and f1.covertype = ''Rewriting of Records'' and f1.CURRENT_FLAG = ''YES'' 
 		and ( (a.Channel <> ''STEADFAST_BUSINESS_PACK_PRODUCT'' and f1.product = a.Channel collate SQL_Latin1_General_CP1_CI_AS) or (a.Channel = ''STEADFAST_BUSINESS_PACK_PRODUCT'' and f1.product is NULL))
-	left join CalibreSSiSdev.dbo.ccomm_freecovers_'+@suffix+'_'+@version+'  f2
+	left join CalibreSSiSdev.dbo.ccomm_freecovers_final  f2
 		on f2.section = ''Fire'' and f2.covertype = ''Removal of Debris'' and f2.CURRENT_FLAG = ''YES'' 
-	left join CalibreSSiSdev.dbo.ccomm_freecovers_'+@suffix+'_'+@version+'  f3
+	left join CalibreSSiSdev.dbo.ccomm_freecovers_final  f3
 		on f3.section = ''Fire'' and f3.covertype = ''Playing Surfaces'' and f3.CURRENT_FLAG = ''YES'' 
-	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER2_core_'+@suffix+'_'+@version+'(''StrataSI'','''','''','''',cast(a.BuildingSumInsured as numeric(15,5))) g
+	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER2_final(''StrataSI'','''','''','''',cast(a.BuildingSumInsured as numeric(15,5))) g
 
-	left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' h1 --added in
+	left join CalibreSSiSdev.dbo.ccomm_businessproperty_final h1 --added in
 		on h1.groupid = ''FireOnly'' and h1.relativitytype = ''Building''
 		and h1.CURRENT_FLAG = ''YES''
-	left join CalibreSSiSdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+' h2 --added in
+	left join CalibreSSiSdev.dbo.ccomm_businessproperty_final h2 --added in
 		on h2.groupid = ''FireOnly'' and h2.relativitytype = ''CSO''
 		and h2.CURRENT_FLAG = ''YES''
 ;'
@@ -2048,7 +2135,7 @@ select
 	as Final_Peril_Rate
 	, b.value as MultiSectionDiscount
 from CalibreSSiSdev.emula.OM_property_pre_4_'+@suffix+'_'+@version+' a
-	outer apply CalibreSSiSdev.dbo.emula_SDP_DATA_LOWER_UPPER_core_'+@suffix+'_'+@version+'(''MultiSectionDiscount'','''', total_section) b
+	outer apply CalibreSSiSdev.dbo.emula_SDP_DATA_LOWER_UPPER_final(''MultiSectionDiscount'','''', total_section) b
 ),
 
 ';
@@ -2068,7 +2155,7 @@ temp6_Final as (
 	, cast(b.value as numeric(15,5)) as Minimum_Rate
 
 From temp5_Final a 
-	left join CalibreSSiSdev.dbo.ccomm_minimum_'+@suffix+'_'+@version+' b
+	left join CalibreSSiSdev.dbo.ccomm_minimum_final b
 		on b.section = ''Fire'' and type = ''Minimum_Rate'' and CURRENT_FLAG = ''YES''
 ),
 temp7_Final as (
@@ -2152,12 +2239,12 @@ select
 	, b.value as Minimum_Premium
 into CalibreSSiSdev.emula.OM_property_premium_'+@suffix+'_'+@version+'
 from temp9_Final  a
-	left join CalibreSSiSdev.dbo.ccomm_minimum_'+@suffix+'_'+@version+' b
+	left join CalibreSSiSdev.dbo.ccomm_minimum_final b
 		on b.section = ''Fire'' and b.type = ''Minimum_Premium'' and b.CURRENT_FLAG = ''YES'';
 
 ';
 
-EXEC( @PD_Emulation_Step1 + @PD_Emulation_Step2 + @PD_Emulation_Step3_A + @PD_Emulation_Step3_B + @PD_Emulation_Step4_A + @PD_Emulation_Step4_B + @PD_Emulation_Step4_C + @PD_Emulation_Step4_D + @PD_Emulation_Step5 + @PD_Emulation_Step6 + @PD_Emulation_Step7_A + @PD_Emulation_Step7_B + @PD_Emulation_Step7_C + @PD_Emulation_Step8_A + @PD_Emulation_Step8_B + @PD_Emulation_Step9 + @PD_Emulation_Step10_A + @PD_Emulation_Step10_B);
+EXEC( @PD_Emulation_Step1 + @PD_Emulation_Step2 + @PD_Emulation_Step3_A + @PD_Emulation_Step3_B + @PD_Emulation_Step4_A + @PD_Emulation_Step4_B + @PD_Emulation_Step4_C + @PD_Emulation_Step4_D + @PD_Emulation_Step5 + @PD_Emulation_Step6 + @PD_Emulation_Step7_A + @PD_Emulation_Step7_B + @PD_Emulation_Step7_C + @PD_Emulation_Step7_D + @PD_Emulation_Step7_E + @PD_Emulation_Step8_A + @PD_Emulation_Step8_B + @PD_Emulation_Step9 + @PD_Emulation_Step10_A + @PD_Emulation_Step10_B);
 
 END
 GO

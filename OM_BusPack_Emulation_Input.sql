@@ -1,7 +1,7 @@
 USE [CalibreSSiSdev]
 GO
 
-/****** Object:  StoredProcedure [emula].[OM_BusPack_Emulation_Input]    Script Date: 4/06/2024 5:46:04 PM ******/
+/****** Object:  StoredProcedure [emula].[OM_BusPack_Emulation_Input_Test]    Script Date: 4/06/2024 5:51:16 PM ******/
 SET ANSI_NULLS ON
 GO
 
@@ -9,9 +9,14 @@ SET QUOTED_IDENTIFIER ON
 GO
 
 
-CREATE procedure [emula].[OM_BusPack_Emulation_Input] 
+
+
+
+
+CREATE procedure [emula].[OM_BusPack_Emulation_Input_Test] 
 ( @suffix varchar(99),
-	@pid varchar(15)
+	@pid varchar(15),
+	@versionno varchar(99)
 
 ) AS
 BEGIN
@@ -38,15 +43,22 @@ SET @Input_Emulation_Step1='
 --		CLAIMS LOADING		--
 ------------------------------
 
-drop table if exists  CalibreSSiSdev.emula.claim_loading;
+drop table if exists  #claim_loading;
 with temp as (
 	select
 		a.*
 		, q.policy_number
 		, q.TERM_START_DATE
 		, q.stage_code 
+		, q.Channel
+		, q.nb_rn
 	From CalibreSSiSdev.svu.s_clm_all_final a
-		Left Join (select distinct POLICY_ID, policy_number, stage_code, TERM_START_DATE, term_end_date from CalibreSSiSdev.svu.svu_analysis) q
+		Left Join (select distinct POLICY_ID, policy_number, stage_code, TERM_START_DATE, term_end_date 
+			, Case When Policy_Number like ''GA7%'' Then ''STEADFAST_BUSINESS_PACK_PRODUCT''
+			When Policy_Wording_Ref in (''BIZCOVER_STANDARD'',''EXPRESS_COVER'') Then ''BIZCOVER_BUSINESS_PACK_PRODUCT'' 
+			When Policy_Wording_Ref in (''CALIBRE_BUSPACK_STANDARD'') Then ''CALIBRE_BUSINESS_PACK_PRODUCT''
+			Else NULL End As Channel, nb_rn
+			from CalibreSSiSdev.svu.svu_analysis) q
 			On a.Policy_ID = q.Policy_ID
 ), #CL01 as (
 	select distinct policy_id, count(distinct concat(ClaimNumber, LossDate)) as clm_cnt_last1Y
@@ -54,39 +66,75 @@ with temp as (
 		where LossDate >= DATEADD(year, -1,TERM_START_DATE) AND Section <> ''BI''
 			group by policy_id
 ), #CLLoading_0205 as ( 
-	select distinct policy_number, TERM_START_DATE, policy_id, stage_code, count(distinct concat(ClaimNumber, LossDate)) as clm_cnt_total
+	select distinct policy_number, TERM_START_DATE, policy_id, stage_code, Channel, nb_rn, count(distinct concat(ClaimNumber, LossDate)) as clm_cnt_total, sum(coalesce(cast(LossIncurred as numeric),0)) as inc_sum_total
 	from temp
-		group by policy_number, TERM_START_DATE, policy_id, stage_code
+		group by policy_number, TERM_START_DATE, policy_id, stage_code, Channel, nb_rn
 ), #CLLoading_0304 as (
-	select distinct policy_id, count(distinct concat(ClaimNumber, LossDate)) as clm_cnt_last2Y, sum(coalesce(cast(LossIncurred as numeric),0)) as inc_sum_last2Y
+	select distinct policy_id, count(distinct concat(ClaimNumber, LossDate)) as clm_cnt_last2Y_nonBI, sum(coalesce(cast(LossIncurred as numeric),0)) as inc_sum_last2Y_nonBI
 	from temp
 		where LossDate >= DATEADD(year, -2,TERM_START_DATE) AND Section <> ''BI''
+		group by policy_id
+), #CLLoading_04 as (
+	select distinct policy_id, count(distinct concat(ClaimNumber, LossDate)) as clm_cnt_last2Y, sum(coalesce(cast(LossIncurred as numeric),0)) as inc_sum_last2Y
+	from temp
+		where LossDate >= DATEADD(year, -2,TERM_START_DATE) 
+		group by policy_id
+), #CLLoading_05 as (
+	select distinct policy_id, count(distinct concat(ClaimNumber, LossDate)) as clm_cnt_nonBI_LIA, sum(coalesce(cast(LossIncurred as numeric),0)) as inc_sum_nonBI_LIA
+	from temp
+		where Section not in (''BI'', ''LIAB'')
+		group by policy_id
+), #CLLoading_06 as (
+	select distinct policy_id, count(distinct concat(ClaimNumber, LossDate)) as clm_cnt_postincep, sum(coalesce(cast(LossIncurred as numeric),0)) as inc_sum_postincep
+	from temp
+		where LossDate > DATEADD(year, -1,TERM_START_DATE) and Section not in (''BI'')
+		group by policy_id
+), #CLLoading_11 As (
+	select distinct policy_id, count(distinct concat(ClaimNumber, LossDate)) as clm_cnt_14mths, sum(coalesce(cast(LossIncurred as numeric),0)) as inc_sum_14mths
+	from temp
+		where (LossDate <= DATEADD(month, 14,Cast(ReportedDate As date)) Or LossDate = ReportedDate) and Section = (''LIAB'')
 		group by policy_id
 ), #claimLoading as (
 	select distinct policy_id, count(distinct concat(ClaimNumber, LossDate)) as clm_cnt_nonBI, sum(coalesce(cast(LossIncurred as numeric),0))  as inc_sum
 	from CalibreSSiSdev.svu.s_clm_all_final
 		where Section <> ''BI''
 		group by policy_id
-)
+), #CLLoading as (
 select 
 a.*
 , b.clm_cnt_last1Y
-, d.clm_cnt_nonBI
-, c.inc_sum_last2Y
-, case when a.stage_code = ''NEWBUSINESS'' and a.clm_cnt_total >= 3 then ''Yes''
-	   when a.stage_code = ''NEWBUSINESS'' and c.inc_sum_last2Y > 10000 then ''Yes''
+, c.inc_sum_last2Y_nonBI
+, d.inc_sum_last2Y
+, case when (('+@versionno+' < 15 and h.clm_cnt_nonBI > 3) Or ('+@versionno+' > 15 and h.clm_cnt_nonBI > 2) ) And a.Channel <> ''CALIBRE_BUSINESS_PACK_PRODUCT'' 
+		and a.stage_code in (''NEWBUSINESS'', ''QUOTE'',''NBAMEND'') then ''Yes''
+	   when (('+@versionno+' >= 15 and '+@versionno+' < 30 and inc_sum_last2Y_nonBI > 5000) Or ('+@versionno+' < 15 and inc_sum_last2Y_nonBI > 10000) Or ('+@versionno+' >= 330 and inc_sum_last2Y_nonBI > 10000)) 
+	   and a.stage_code not in (''RNTAKEUP'', ''TAKEUP'',''NBAMEND'')  then ''Yes''
+	   when '+@versionno+' > 330 and e.inc_sum_nonBI_LIA > 10000 and a.Channel <>  ''CALIBRE_BUSINESS_PACK_PRODUCT'' then ''Yes''
+	   when '+@versionno+' > 10 and a.stage_code in (''ALTERATION'', ''RENEWAL'') and clm_cnt_14mths>0 and a.Channel <> ''CALIBRE_BUSINESS_PACK_PRODUCT'' Then ''Yes''
+	   when '+@versionno+' > 590 and a.stage_code in (''NEWBUSINESS'') and  inc_sum_14mths > 10000 and a.Channel <> ''CALIBRE_BUSINESS_PACK_PRODUCT''  Then ''Yes''
+	   when (('+@versionno+' < 385 and inc_sum_total > 3000) Or ('+@versionno+' >= 285 and d.inc_sum_last2Y > 5000) Or ('+@versionno+' >= 330 and d.inc_sum_last2Y > 10000)) and a.Channel <> ''CALIBRE_BUSINESS_PACK_PRODUCT'' and a.stage_code not in (''RNTAKEUP'', ''TAKEUP'') Then ''Yes''
 	   else ''No'' end as  CLLoading_flag
 , iif(a.stage_code = ''NEWBUSINESS'' 
 		and b.clm_cnt_last1Y >= 3
-		and d.policy_id is not null, ''Yes'', ''No'') as CL01Loding_prpOnly_flag
-, iif(a.stage_code = ''NEWBUSINESS'' 
-		and coalesce(b.clm_cnt_last1Y,0) < 3
-		and coalesce(a.clm_cnt_total,0) < 3 and coalesce(c.inc_sum_last2Y,0) <= 10000 
-		and d.policy_id is not null, ''Yes'', ''No'') as claimLoading_flag
-into CalibreSSiSdev.emula.claim_loading
+		and h.policy_id is not null, ''Yes'', ''No'') as CL01Loding_prpOnly_flag
+, case when (h.clm_cnt_nonBI > 0 and '+@versionno+' >= 800) Or (clm_cnt_total>0 and '+@versionno+' >= 720 and '+@versionno+' < 800 and nb_rn = ''NB'') and (clm_cnt_total>0 and '+@versionno+' >= 540 and '+@versionno+' < 720) Then 1
+	else 0 End as claimloading_flag_temp
+
 from #CLLoading_0205 a
 	left join #CL01		      b on a.policy_id = b.policy_id
 	left join #CLLoading_0304 c on a.policy_id = c.policy_id
+	left join #CLLoading_04   d on a.policy_id = d.policy_id
+	left join #CLLoading_05   e on a.policy_id = e.policy_id
+	left join #CLLoading_06   f on a.policy_id = f.policy_id
+	left join #CLLoading_11   g on a.policy_id = g.policy_id
+	left join #claimLoading   h on a.policy_id = h.policy_id
+) 
+Select 
+a.*
+, d.clm_cnt_nonBI
+, iif(CLLoading_flag = ''No'' and claimloading_flag_temp = 1, ''Yes'', ''No'') as claimLoading_flag
+into #claim_loading
+From #CLLoading a
 	left join #claimLoading   d on a.policy_id = d.policy_id
 
 
@@ -161,6 +209,7 @@ a.policy_id
 , a0.Tenant5_Occ as Tenant5_Occ
 , a0.Tenant6_Occ as Tenant6_Occ
 , a0.Tenant7_Occ as Tenant7_Occ
+
 , b.SUBURB
 , case when b.STATE is not null then b.State else b2.state end as state
 , b.PCODE
@@ -249,6 +298,19 @@ a.policy_id
 , c.[PropertyDustExtractorCleaned]
 , coalesce(c1.SumInsured,0) as SpecifiedItemsSumInsured
 , c1.Category as psi_category
+, svu_anal.Fire_Class
+, c.ManufacturingPercentage 
+, c.WashFacility
+, c.FibreGlassWork
+, c.StorageWarehouse
+, c.RepairServicePremises
+, c.RestaurantorBar
+, c.Woodworking
+, c.WoodworkingDustExtractorCleaning
+, c.WoodworkingDustExtractors
+, c.SprayPaintingControl
+, c.WasteRemovalProcess
+, c.TimberStorageYard
 
 
 
@@ -859,7 +921,7 @@ from CalibreSSiSdev.svu.SECTION_SIT a
 	on a.policy_id = n.policy_id and a.address_id = n.address_id
 	left join CalibreSSiSdev.svu.tenant_count o
 	on a.policy_id = o.policy_id and a.address_id = o.address_id
-	left join CalibreSSiSdev.emula.claim_loading clm 
+	left join #claim_loading clm 
 	on a.policy_id = clm.policy_id
 	left join (select distinct POLICY_ID from CalibreSSiSdev.svu.s_pol_all WHERE Property_code_value = ''Yes'' and PROPERTY_REF like ''dod.%'' and PROPERTY_REF <> ''dod.Acknowledgement'') dod on a.policy_id = dod.policy_id
 	left join CalibreSSiSdev.svu.s_pol_all_final dodf on a.policy_id = dodf.policy_id
@@ -869,6 +931,7 @@ from CalibreSSiSdev.svu.SECTION_SIT a
 	left join #ccomm_data_loading ld4 on a.policy_id is not null and ld4.groupid = ''PNLoading''
 	left join #ccomm_data_loading ld5 on a.policy_id is not null and ld5.groupid = ''SSLoading''
 	left join #ccomm_data_loading ld6 on a.policy_id is not null and ld6.groupid = ''flood''    and ld6.code = ''Yes''
+	
 	inner join InforceBook svu_anal
 	on a.address_id = svu_anal.address_id
 Where a.address_id is not null and svu_anal.LatestTransTerm = 1 and svu_anal.status_code like ''ONRISK%''
@@ -880,18 +943,43 @@ Where a.address_id is not null and svu_anal.LatestTransTerm = 1 and svu_anal.sta
 --			Final Input Table		--
 --------------------------------------
 SET @Input_Emulation_Step3='
+
+drop table if exists  CalibreSSiSdev.emula.testing_input_temp2_'+@suffix+'
+select a.*
+	, (select count(*) from (values(a.Tenant1_Occ), (a.Tenant2_Occ), (Tenant3_Occ), (Tenant4_Occ), (Tenant5_Occ), (Tenant6_Occ), (Tenant7_Occ)) as OSQ(OSQ107) where OSQ.OSQ107 is not null and b1.text_property_a like iif(OSQ.OSQ107 is not NULL, CONCAT(''%'',OSQ.OSQ107, ''%''), NULL)) As OSQ107_Count
+	, (select count(*) from (values(a.Tenant1_Occ), (a.Tenant2_Occ), (Tenant3_Occ), (Tenant4_Occ), (Tenant5_Occ), (Tenant6_Occ), (Tenant7_Occ)) as OSQ(OSQ100) where OSQ.OSQ100 is not null and b2.text_property_a like iif(OSQ.OSQ100 is not NULL, CONCAT(''%'',OSQ.OSQ100, ''%''), NULL)) As OSQ100_Count
+	, (select count(*) from (values(a.Tenant1_Occ), (a.Tenant2_Occ), (Tenant3_Occ), (Tenant4_Occ), (Tenant5_Occ), (Tenant6_Occ), (Tenant7_Occ)) as OSQ(OSQ104) where OSQ.OSQ104 is not null and b3.text_property_a like iif(OSQ.OSQ104 is not NULL, CONCAT(''%'',OSQ.OSQ104, ''%''), NULL)) As OSQ104_Count
+	, (select count(*) from (values(a.Tenant1_Occ), (a.Tenant2_Occ), (Tenant3_Occ), (Tenant4_Occ), (Tenant5_Occ), (Tenant6_Occ), (Tenant7_Occ)) as OSQ(OSQ99) where OSQ.OSQ99 is not null and b4.text_property_a like iif(OSQ.OSQ99 is not NULL, CONCAT(''%'',OSQ.OSQ99, ''%''), NULL)) As OSQ99_Count
+	, (select count(*) from (values(a.Tenant1_Occ), (a.Tenant2_Occ), (Tenant3_Occ), (Tenant4_Occ), (Tenant5_Occ), (Tenant6_Occ), (Tenant7_Occ)) as OSQ(OSQ111) where OSQ.OSQ111 is not null and b5.text_property_a like iif(OSQ.OSQ111 is not NULL, CONCAT(''%'',OSQ.OSQ111, ''%''), NULL)) As OSQ111_Count
+	, (select count(*) from (values(a.Tenant1_Occ), (a.Tenant2_Occ), (Tenant3_Occ), (Tenant4_Occ), (Tenant5_Occ), (Tenant6_Occ), (Tenant7_Occ)) as OSQ(OSQ112A) where OSQ.OSQ112A is not null and b6.text_property_a like iif(OSQ.OSQ112A is not NULL, CONCAT(''%'',OSQ.OSQ112A, ''%''), NULL)) As OSQ112A_Count
+	, (select count(*) from (values(a.Tenant1_Occ), (a.Tenant2_Occ), (Tenant3_Occ), (Tenant4_Occ), (Tenant5_Occ), (Tenant6_Occ), (Tenant7_Occ)) as OSQ(OSQ112B) where OSQ.OSQ112B is not null and b7.text_property_a like iif(OSQ.OSQ112B is not NULL, CONCAT(''%'',OSQ.OSQ112B, ''%''), NULL)) As OSQ112B_Count
+
+into CalibreSSiSdev.emula.testing_input_temp2_'+@suffix+'
+from CalibreSSiSdev.emula.testing_input_temp1_'+@suffix+' a
+	left join CalibreSSiSdev.dbo.ccomm_data_final b1 on b1.groupid = ''OSQ107'' and b1.code = ''ANSZIC'' and b1.Current_Flag=''YES''
+	left join CalibreSSiSdev.dbo.ccomm_data_final b2 on b2.groupid = ''OSQ100'' and b2.code = ''ANSZIC'' and b2.Current_Flag=''YES''
+	left join CalibreSSiSdev.dbo.ccomm_data_final b3 on b3.groupid = ''OSQ104'' and b3.code = ''ANSZIC'' and b3.Current_Flag=''YES''
+	left join CalibreSSiSdev.dbo.ccomm_data_final b4 on b4.groupid = ''OSQ99'' and b4.code = ''ANSZIC'' and b4.Current_Flag=''YES''
+	left join CalibreSSiSdev.dbo.ccomm_data_final b5 on b5.groupid = ''OSQ111'' and b5.code = ''ANSZIC'' and b5.Current_Flag=''YES''
+	left join CalibreSSiSdev.dbo.ccomm_data_final b6 on b6.groupid = ''OSQ112'' and b6.code = ''LIST3A'' and b6.Current_Flag=''YES''
+	left join CalibreSSiSdev.dbo.ccomm_data_final b7 on b7.groupid = ''OSQ112'' and b7.code = ''LIST3B'' and b7.Current_Flag=''YES''
+
+;
+
+
+
 drop table if exists  CalibreSSiSdev.emula.testing_input_'+@suffix+'
 select a.*, b.Policy_situation_count, c.Liab_situation_count, c.liab_sum_AnnualTurnover
 , iif(a.Category=''Non_PO'', ''No'', ''Yes'') as Category_label
 into CalibreSSiSdev.emula.testing_input_'+@suffix+'
-from CalibreSSiSdev.emula.testing_input_temp1_'+@suffix+' a
+from CalibreSSiSdev.emula.testing_input_temp2_'+@suffix+' a
 left join (select  policy_number, policy_id, count(*) as Policy_situation_count 
 			from  CalibreSSiSdev.emula.testing_input_temp1_'+@suffix+'
 			group by  policy_number, policy_id
 			) b   -- This situation count is the total situation count for the policy, not necessary for each covered section
 			on a.policy_number = b.policy_number and a.policy_id = b.policy_id
 left join (select  policy_number, policy_id, count(*) as Liab_situation_count, sum(coalesce(AnnualTurnover,0)) as liab_sum_AnnualTurnover
-			from  CalibreSSiSdev.emula.testing_input_temp1_'+@suffix+'
+			from  CalibreSSiSdev.emula.testing_input_temp2_'+@suffix+'
 			where LIABILITY_SECTION_TAKEN = 1 
 			group by  policy_number, policy_id
 			) c 

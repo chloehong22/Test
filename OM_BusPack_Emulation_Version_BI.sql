@@ -1,7 +1,7 @@
 USE [CalibreSSiSdev]
 GO
 
-/****** Object:  StoredProcedure [emula].[OM_BusPack_Emulation_Version_BI]    Script Date: 4/06/2024 5:48:05 PM ******/
+/****** Object:  StoredProcedure [emula].[OM_BusPack_Emulation_Version_BI_Test]    Script Date: 4/06/2024 5:52:01 PM ******/
 SET ANSI_NULLS ON
 GO
 
@@ -15,7 +15,8 @@ GO
 
 
 
-CREATE procedure [emula].[OM_BusPack_Emulation_Version_BI] 
+
+CREATE procedure [emula].[OM_BusPack_Emulation_Version_BI_Test] 
 ( @version varchar(99)
  , @suffix varchar(99)) AS
 BEGIN
@@ -118,36 +119,36 @@ select
 	, case when a.Tenant7_Occ != '''' then b7.bi_rel else ''0'' end as Tenant7_Occ_bi_rel
 	, b8.bi_rel as ANZSIC_bi_rel
 from CalibreSSiSdev.emula.OM_BI_testing_input_'+@suffix+'_'+@version+' a 
-	left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' b1 --updated
+	left join CalibreSSiSdev.dbo.ccomm_occupation_final b1 --updated
 		on a.Tenant1_Occ = b1.calliden_code  collate SQL_Latin1_General_CP1_CI_AS 
 		and b1.CURRENT_FLAG = ''YES''
 
-	left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' b2 --updated
+	left join CalibreSSiSdev.dbo.ccomm_occupation_final b2 --updated
 		on a.Tenant2_Occ = b2.calliden_code collate SQL_Latin1_General_CP1_CI_AS 
 		and b2.CURRENT_FLAG = ''YES''
 
-	left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' b3 --updated
+	left join CalibreSSiSdev.dbo.ccomm_occupation_final b3 --updated
 		on a.Tenant3_Occ = b3.calliden_code collate SQL_Latin1_General_CP1_CI_AS 
 		and b3.CURRENT_FLAG = ''YES'' 
 
-	left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' b4 --updated
+	left join CalibreSSiSdev.dbo.ccomm_occupation_final b4 --updated
 		on a.Tenant4_Occ = b4.calliden_code collate SQL_Latin1_General_CP1_CI_AS 
 		and b4.CURRENT_FLAG = ''YES'' 
 
-	left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' b5 --updated
+	left join CalibreSSiSdev.dbo.ccomm_occupation_final b5 --updated
 		on a.Tenant5_Occ = b5.calliden_code collate SQL_Latin1_General_CP1_CI_AS 
 	and b5.CURRENT_FLAG = ''YES'' 
 
-	left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' b6 --updated
+	left join CalibreSSiSdev.dbo.ccomm_occupation_final b6 --updated
 		on a.Tenant6_Occ = b6.calliden_code collate SQL_Latin1_General_CP1_CI_AS 
 		and b6.CURRENT_FLAG = ''YES''
 
-	left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' b7 --updated
+	left join CalibreSSiSdev.dbo.ccomm_occupation_final b7 --updated
 		on a.Tenant7_Occ = b7.calliden_code collate SQL_Latin1_General_CP1_CI_AS 
 		and b7.CURRENT_FLAG = ''YES'' 
 
 
-	left join CalibreSSiSdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+' b8 --updated
+	left join CalibreSSiSdev.dbo.ccomm_occupation_final b8 --updated
 		on a.ANZSIC = b8.calliden_code  collate SQL_Latin1_General_CP1_CI_AS 
 		and b8.CURRENT_FLAG = ''YES'' 
 )
@@ -166,15 +167,15 @@ select
 	, 1 as Scheme_Rel
 into CalibreSSiSdev.emula.OM_bi_pre_1_'+@suffix+'_'+@version+'
 From temp a 
-	left join CalibreSSiSdev.dbo.ccomm_location_'+@suffix+'_'+@version+' b --updated
+	left join CalibreSSiSdev.dbo.ccomm_location_final b --updated
 		on a.STATE + ''_'' + a.SUBURB + ''_'' + a.PCODE = b.locationindex collate SQL_Latin1_General_CP1_CI_AS
-	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER_core_'+@suffix+'_'+@version+'(''BICustomerSuppliers'',''Low Hazard / Medium Hazard'','''','''',
+	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER_core_final(''BICustomerSuppliers'',''Low Hazard / Medium Hazard'','''','''',
 			cast(case when a.Dependency_1 = '''' then ''-1'' else a.Dependency_1 end  as numeric(15,5))) c1 
-	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER_core_'+@suffix+'_'+@version+'(''Alpine, Bushfire, Cyclone, Island, Remote'',''Low Hazard / Medium Hazard'','''','''',
+	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER_core_final(''Alpine, Bushfire, Cyclone, Island, Remote'',''Low Hazard / Medium Hazard'','''','''',
 			cast(case when a.Dependency_1 = '''' then ''-1'' else a.Dependency_1 end as numeric(15,5))) c2 
-	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER_core_'+@suffix+'_'+@version+'(''BICustomerSuppliers'',''Low Hazard / Medium Hazard'','''','''',
+	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER_core_final(''BICustomerSuppliers'',''Low Hazard / Medium Hazard'','''','''',
 			cast(case when a.Dependency_2 = '''' then ''-1'' else a.Dependency_2 end  as numeric(15,5))) d1 
-	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER_core_'+@suffix+'_'+@version+'(''Alpine, Bushfire, Cyclone, Island, Remote'',''Low Hazard / Medium Hazard'','''','''',
+	outer apply CalibreSSiSdev.dbo.emula_SDP_BUSINESSPROPERTY_LOWER_UPPER_core_final(''Alpine, Bushfire, Cyclone, Island, Remote'',''Low Hazard / Medium Hazard'','''','''',
 			cast(case when a.Dependency_2 = '''' then ''-1'' else a.Dependency_2 end as numeric(15,5))) d2 
 	where b.CURRENT_FLAG = ''YES''
 ;'
@@ -203,7 +204,7 @@ select
 from CalibreSSiSdev.emula.OM_bi_pre_1_'+@suffix+'_'+@version+' a 
 	left join CalibreSSiSdev.emula.OM_property_premium_'+@suffix+'_'+@version+' b
 		on a.policy_id = b.policy_id and a.address_id = b.address_id
-	left join CalibreSSiSdev.dbo.ccomm_bi_'+@suffix+'_'+@version+' c
+	left join CalibreSSiSdev.dbo.ccomm_bi_final c
 		on a.bi_indemnityperiod = c.code collate SQL_Latin1_General_CP1_CI_AS 
 		and a.BI_COVER_TYPE = c.relativitytype collate SQL_Latin1_General_CP1_CI_AS
 		and c.CURRENT_FLAG = ''YES''
@@ -279,26 +280,26 @@ SET @BI_Emulation_Step3_B='
 SET @BI_Emulation_Step3_C='
 
 from temp a 
-	left join CalibreSSiSdev.dbo.ccomm_bi_'+@suffix+'_'+@version+' b1
+	left join CalibreSSiSdev.dbo.ccomm_bi_final b1
 		on a.bi_indemnityperiod = b1.code collate SQL_Latin1_General_CP1_CI_AS
 		and b1.relativitytype = ''GROSSPROF'' and b1.CURRENT_FLAG = ''YES''
-	left join CalibreSSiSdev.dbo.ccomm_bi_'+@suffix+'_'+@version+' b2
+	left join CalibreSSiSdev.dbo.ccomm_bi_final b2
 		on a.bi_indemnityperiod = b2.code collate SQL_Latin1_General_CP1_CI_AS
 		and b2.relativitytype = ''WEEKREV'' and b2.CURRENT_FLAG = ''YES''
-	left join CalibreSSiSdev.dbo.ccomm_bi_'+@suffix+'_'+@version+' b3
+	left join CalibreSSiSdev.dbo.ccomm_bi_final b3
 		on a.bi_indemnityperiod = b3.code collate SQL_Latin1_General_CP1_CI_AS
 		and b3.relativitytype = ''ANNREV'' and b3.CURRENT_FLAG = ''YES''
-	left join CalibreSSiSdev.dbo.ccomm_bi_'+@suffix+'_'+@version+' c
+	left join CalibreSSiSdev.dbo.ccomm_bi_final c
 		on substring(a.BI_IndemnityPeriod,1,3) = c.code collate SQL_Latin1_General_CP1_CI_AS
 		and c.relativitytype = ''LOSSOFRENT'' and c.CURRENT_FLAG = ''YES''
-	left join CalibreSSiSdev.dbo.ccomm_bi_'+@suffix+'_'+@version+' d
+	left join CalibreSSiSdev.dbo.ccomm_bi_final d
 		on a.BI_IndemnityPeriod = d.code collate SQL_Latin1_General_CP1_CI_AS
 		and d.relativitytype = ''AICOWONLY''and d.CURRENT_FLAG = ''YES''
-	left join CalibreSSiSdev.dbo.ccomm_freecovers_'+@suffix+'_'+@version+' e1
+	left join CalibreSSiSdev.dbo.ccomm_freecovers_final e1
 		on e1.section = ''BusinessInterruption'' and e1.covertype = ''AICOW'' and e1.CURRENT_FLAG = ''YES'' 
-	left join CalibreSSiSdev.dbo.ccomm_freecovers_'+@suffix+'_'+@version+' e2
+	left join CalibreSSiSdev.dbo.ccomm_freecovers_final e2
 		on e2.section = ''BusinessInterruption'' and e2.covertype = ''Claims Preparation'' and e2.CURRENT_FLAG = ''YES'' 
-	left join CalibreSSiSdev.dbo.ccomm_freecovers_'+@suffix+'_'+@version+' e3
+	left join CalibreSSiSdev.dbo.ccomm_freecovers_final e3
 		on e3.section = ''BusinessInterruption'' and e3.covertype = ''Accounts Receivable'' and e3.CURRENT_FLAG = ''YES''
 )
 select distinct 
@@ -313,7 +314,7 @@ select distinct
 		as Total_BI_Premium
 into CalibreSSiSdev.emula.OM_bi_premium_'+@suffix+'_'+@version+'
 from temp2 a 
-	left join CalibreSSiSdev.dbo.ccomm_minimum_'+@suffix+'_'+@version+' b
+	left join CalibreSSiSdev.dbo.ccomm_minimum_final b
 		on b.section = ''BusinessInterruption'' and type = ''Minimum_Premium'' and CURRENT_FLAG = ''YES''
 	left join CalibreSSiSdev.emula.OM_property_premium_'+@suffix+'_'+@version+' c
 		on a.policy_id = c.policy_id and a.address_id = c.address_id;

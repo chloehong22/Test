@@ -1,7 +1,7 @@
 USE [CalibreSSiSdev]
 GO
 
-/****** Object:  StoredProcedure [emula].[OM_BusPack_Emulation_Prep_B]    Script Date: 4/06/2024 5:47:06 PM ******/
+/****** Object:  StoredProcedure [emula].[OM_BusPack_Emulation_Prep_B_Test]    Script Date: 4/06/2024 5:51:44 PM ******/
 SET ANSI_NULLS ON
 GO
 
@@ -12,7 +12,11 @@ GO
 
 
 
-CREATE procedure [emula].[OM_BusPack_Emulation_Prep_B] 
+
+
+
+
+CREATE procedure [emula].[OM_BusPack_Emulation_Prep_B_Test] 
 ( @suffix varchar(99)
 , @version varchar(99) 
 ) AS
@@ -32,32 +36,16 @@ Set @VersionControl_Emulation_Step1 ='
 
 ---- Update Property SI Curve table
 
-exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS]
+exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS_TEST]
 @in_tablename = ''dbo.ccomm_businessproperty_sicurve_'+@suffix+''',
-@out_tablename = ''dbo.ccomm_businessproperty_sicurve_'+@suffix+'_'+@version+''',
+@out_tablename = ''dbo.ccomm_businessproperty_sicurve_final'',
 @clause = '''',
+@version = '+@version+', 
 @part_key = ''state
       ,type
       ,suminsuredfrom
       ,suminsuredto''
 
-Alter Table calibressisdev.dbo.ccomm_businessproperty_sicurve_'+@suffix+'_'+@version+'
-Add premiumlow_PreCRP int Not NULL Default(0) 
-
-Alter Table calibressisdev.dbo.ccomm_businessproperty_sicurve_'+@suffix+'_'+@version+'
-Add premiumhi_PreCRP int Not NULL Default(0) 
-
-Alter Table calibressisdev.dbo.ccomm_businessproperty_sicurve_'+@suffix+'_'+@version+'
-Add newrate_PreCRP int Not NULL Default(0) 
-
-Alter Table calibressisdev.dbo.ccomm_businessproperty_sicurve_'+@suffix+'_'+@version+'
-Add premiumlow_PostCRP int Not NULL Default(0) 
-
-Alter Table calibressisdev.dbo.ccomm_businessproperty_sicurve_'+@suffix+'_'+@version+'
-Add premiumhi_PostCRP int Not NULL Default(0) 
-
-Alter Table calibressisdev.dbo.ccomm_businessproperty_sicurve_'+@suffix+'_'+@version+'
-Add newrate_PostCRP int Not NULL Default(0) 
 
 ---- Update Property table
 
@@ -76,10 +64,11 @@ into calibressisdev.dbo.ccomm_businessproperty_temp
 from calibressisdev.dbo.ccomm_businessproperty_'+@suffix+'
 
 --Apply Current Flags
-exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS]
+exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS_TEST]
 @in_tablename = ''calibressisdev.dbo.ccomm_businessproperty_temp'',
-@out_tablename = ''calibressisdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+''',
+@out_tablename = ''calibressisdev.dbo.ccomm_businessproperty_final'',
 @clause = '''',
+@version = '+@version+', 
 @part_key = ''groupid
       ,code
       ,rangefield
@@ -94,19 +83,21 @@ drop table if exists  calibressisdev.dbo.ccomm_businessproperty_temp
 ---- Update Occupation table
 
 
-exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS]
+exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS_TEST]
 @in_tablename = ''calibressisdev.dbo.ccomm_occupation_'+@suffix+''',
-@out_tablename = ''calibressisdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+''',
+@out_tablename = ''calibressisdev.dbo.ccomm_occupation_final'',
 @clause = '''',
+@version = '+@version+', 
 @part_key = ''calliden_code''
 
 
 
 ---- Update Excess table
-exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS]
+exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS_TEST]
 @in_tablename = ''calibressisdev.dbo.ccomm_excess_'+@suffix+''',
-@out_tablename = ''calibressisdev.dbo.ccomm_excess_'+@suffix+'_'+@version+''',
+@out_tablename = ''calibressisdev.dbo.ccomm_excess_final'',
 @clause = '''',
+@version = '+@version+', 
 @part_key = ''relativitytype
       ,state
 	  ,excessvalue''
@@ -114,17 +105,12 @@ exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS]
 
 
 ---- Update Location table
-exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS]
+exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS_TEST]
 @in_tablename = ''calibressisdev.dbo.ccomm_location_'+@suffix+''',
-@out_tablename = ''calibressisdev.dbo.ccomm_location_'+@suffix+'_'+@version+''',
+@out_tablename = ''calibressisdev.dbo.ccomm_location_final'',
 @clause = '''',
+@version = '+@version+', 
 @part_key = ''locationindex''
-
-Alter Table calibressisdev.dbo.ccomm_location_'+@suffix+'_'+@version+'
-Add fireperilsrel_preCRP int Not NULL Default(1) 
-
-Alter Table calibressisdev.dbo.ccomm_location_'+@suffix+'_'+@version+'
-Add fireperilsrel_postCRP int Not NULL Default(1) 
 
 
 ---- Update Liability table
@@ -162,10 +148,11 @@ into calibressisdev.dbo.ccomm_liability_temp
 from calibressisdev.dbo.ccomm_liability_'+@suffix+'
 
 --Apply Current Flag
-exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS]
+exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS_TEST]
 @in_tablename = ''calibressisdev.dbo.ccomm_liability_temp'',
-@out_tablename = ''calibressisdev.dbo.ccomm_liability_'+@suffix+'_'+@version+''',
+@out_tablename = ''calibressisdev.dbo.ccomm_liability_final'',
 @clause = '''',
+@version = '+@version+', 
 @part_key = ''groupid
       ,propertyowner
 	  ,code
@@ -181,7 +168,7 @@ select isnull(lag(code, 1) over (partition by groupid, propertyowner order by ca
 		-1, 9999)  as code_to
 , * 
 into calibressisdev.dbo.ccomm_liability_staff_'+@suffix+'
-from calibressisdev.dbo.ccomm_liability_'+@suffix+'_'+@version+'
+from calibressisdev.dbo.ccomm_liability_final
 where groupid in (''PartTimeStaff'', ''FullTimeStaff'', ''CombinedStaff'') and CURRENT_FLAG = ''Yes'';
 
 drop table if exists  calibressisdev.dbo.ccomm_liability_temp;
@@ -189,20 +176,22 @@ drop table if exists  calibressisdev.dbo.ccomm_liability_temp;
 
 
 ---- Update BI table
-exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS]
+exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS_TEST]
 @in_tablename = ''calibressisdev.dbo.ccomm_bi_'+@suffix+''',
-@out_tablename = ''calibressisdev.dbo.ccomm_bi_'+@suffix+'_'+@version+''',
+@out_tablename = ''calibressisdev.dbo.ccomm_bi_final'',
 @clause = '''',
+@version = '+@version+', 
 @part_key = ''code
       ,relativitytype''
 
 
 
 ---- Update Minimum table
-exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS]
+exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS_TEST]
 @in_tablename = ''calibressisdev.dbo.ccomm_minimum_'+@suffix+''',
-@out_tablename = ''calibressisdev.dbo.ccomm_minimum_'+@suffix+'_'+@version+''',
+@out_tablename = ''calibressisdev.dbo.ccomm_minimum_final'',
  @clause = '''',
+ @version = '+@version+', 
  @part_key =''section
  ,type
  ,valuetype''
@@ -219,10 +208,11 @@ into calibressisdev.dbo.ccomm_ee_temp
  from calibressisdev.dbo.ccomm_ee_'+@suffix+'
 
 -- Apply current flag
-exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS]
+exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS_TEST]
 @in_tablename = ''calibressisdev.dbo.ccomm_ee_temp'',
-@out_tablename = ''calibressisdev.dbo.ccomm_ee_'+@suffix+'_'+@version+''',
+@out_tablename = ''calibressisdev.dbo.ccomm_ee_final'',
  @clause = '''',
+ @version = '+@version+', 
  @part_key =''groupid
  ,state
  ,code''
@@ -240,10 +230,11 @@ into calibressisdev.dbo.ccomm_glass_temp
  from calibressisdev.dbo.ccomm_glass_'+@suffix+'
 
 -- Apply Current Flag
-exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS]
+exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS_TEST]
 @in_tablename = ''calibressisdev.dbo.ccomm_glass_temp'',
-@out_tablename = ''calibressisdev.dbo.ccomm_glass_'+@suffix+'_'+@version+''',
+@out_tablename = ''calibressisdev.dbo.ccomm_glass_final'',
  @clause = '''',
+ @version = '+@version+', 
  @part_key =''groupid
  ,propertyowner
  ,code''
@@ -260,13 +251,22 @@ into calibressisdev.dbo.ccomm_gp_temp
  from calibressisdev.dbo.ccomm_gp_'+@suffix+'
 
 -- Apply Current Flag
- exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS]
+ exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS_TEST]
 @in_tablename = ''calibressisdev.dbo.ccomm_gp_temp'',
-@out_tablename = ''calibressisdev.dbo.ccomm_gp_'+@suffix+'_'+@version+''',
+@out_tablename = ''calibressisdev.dbo.ccomm_gp_final'',
  @clause = '''',
+ @version = '+@version+', 
  @part_key =''groupid
  ,code''
 
+
+
+
+
+';
+
+
+Set @VersionControl_Emulation_Step2 ='
 drop table if exists  calibressisdev.dbo.ccomm_gp_temp
 
   ---- Update Machinery table
@@ -280,19 +280,12 @@ value,version
 into calibressisdev.dbo.ccomm_machinery_temp
  from calibressisdev.dbo.ccomm_machinery_'+@suffix+'
 
-
-
-
-';
-
-
-Set @VersionControl_Emulation_Step2 ='
-
 -- Apply Current Flag
- exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS]
+ exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS_TEST]
 @in_tablename = ''calibressisdev.dbo.ccomm_machinery_temp'',
-@out_tablename = ''calibressisdev.dbo.ccomm_machinery_'+@suffix+'_'+@version+''',
+@out_tablename = ''calibressisdev.dbo.ccomm_machinery_final'',
  @clause = '''',
+ @version = '+@version+', 
  @part_key =''groupid
  ,propertyowner
  ,code
@@ -315,10 +308,11 @@ into calibressisdev.dbo.ccomm_money_temp
  from calibressisdev.dbo.ccomm_money_'+@suffix+'
 
 -- Apply Current Flag
- exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS]
+ exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS_TEST]
 @in_tablename = ''calibressisdev.dbo.ccomm_money_temp'',
-@out_tablename = ''calibressisdev.dbo.ccomm_money_'+@suffix+'_'+@version+''',
+@out_tablename = ''calibressisdev.dbo.ccomm_money_final'',
  @clause = '''',
+ @version = '+@version+', 
  @part_key =''groupid
  ,propertyowner
  ,code
@@ -341,10 +335,11 @@ into calibressisdev.dbo.ccomm_theft_temp
  from calibressisdev.dbo.ccomm_theft_'+@suffix+'
 
  -- Applu Current Flag
- exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS]
+ exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS_TEST]
 @in_tablename = ''calibressisdev.dbo.ccomm_theft_temp'',
-@out_tablename = ''calibressisdev.dbo.ccomm_theft_'+@suffix+'_'+@version+''',
+@out_tablename = ''calibressisdev.dbo.ccomm_theft_final'',
  @clause = '''',
+ @version = '+@version+', 
  @part_key =''groupid
  ,propertyowner
  ,code
@@ -372,10 +367,11 @@ from calibressisdev.dbo.ccomm_transit_'+@suffix+'
 
 
 -- Apply Current Flag
- exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS]
+ exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS_TEST]
 @in_tablename = ''calibressisdev.dbo.ccomm_transit_temp'',
-@out_tablename = ''calibressisdev.dbo.ccomm_transit_'+@suffix+'_'+@version+''',
+@out_tablename = ''calibressisdev.dbo.ccomm_transit_final'',
  @clause = '''',
+ @version = '+@version+', 
  @part_key =''groupid
  ,code
  ,rangefrom
@@ -390,6 +386,7 @@ set upperto = 13
 where groupid = ''MultiSectionDiscount'' and upperto = 12
 
 -- Replace Null with Blanks
+drop table if exists  calibressisdev.dbo.ccomm_data_temp;
 select 
 	groupid
 	, iif(code is null, '''', code) as code
@@ -406,10 +403,12 @@ into calibressisdev.dbo.ccomm_data_temp
  from calibressisdev.dbo.ccomm_data_'+@suffix+'
 
  -- Apply Current Flag
- exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS]
+ drop table if exists  calibressisdev.dbo.ccomm_data_temp2;
+ exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS_TEST]
 @in_tablename = ''calibressisdev.dbo.ccomm_data_temp'',
-@out_tablename = ''calibressisdev.dbo.ccomm_data_'+@suffix+'_'+@version+''',
+@out_tablename = ''calibressisdev.dbo.ccomm_data_temp2'',
  @clause = '''',
+ @version = '+@version+', 
  @part_key =''groupid
  ,code
  ,text_property_a
@@ -418,53 +417,57 @@ into calibressisdev.dbo.ccomm_data_temp
  ,lowerfrom
  ,upperto''
  
+drop table if exists calibressisdev.dbo.ccomm_data_final;
+Select 
+	groupid
+	, code
+	, text_property_a
+	, text_property_b
+	, text_property_c
+	, int_property_a
+	, int_property_b
+	, int_property_c
+	, lowerfrom
+	, upperto
+	, version
+	, effectivedate
+	, Case When groupid like ''OSQ%'' Then LEAD(effectivedate,1,''9999-12-31'') over (partition by groupid, code, lowerfrom, upperto order by effectivedate asc)
+		else enddate end as enddate
+	, releasedate
+	, case when groupid like ''OSQ%'' and LEAD(effectivedate,1,''9999-12-31'') over (partition by groupid, code, lowerfrom, upperto order by effectivedate asc) = ''9999-12-31'' and version = '+ @version +' then ''YES''
+		when groupid like ''OSQ%'' and LEAD(effectivedate,1,''9999-12-31'') over (partition by groupid, code, lowerfrom, upperto order by effectivedate asc) = ''9999-12-31'' and version <> '+ @version +' then ''YES''
+		when groupid like ''OSQ%'' and LEAD(effectivedate,1,''9999-12-31'') over (partition by groupid, code, lowerfrom, upperto order by effectivedate asc) <> ''9999-12-31'' and version = '+ @version +' then ''YES''
+		when groupid like ''OSQ%'' and LEAD(effectivedate,1,''9999-12-31'') over (partition by groupid, code, lowerfrom, upperto order by effectivedate asc) <> ''9999-12-31'' and version <> '+ @version +' then ''NO''
+		else current_flag end as CURRENT_FLAG 
+into calibressisdev.dbo.ccomm_data_final
+from calibressisdev.dbo.ccomm_data_temp2
+;
 
 
-drop table if exists  calibressisdev.dbo.ccomm_data_temp;
+
 
 
  ---- Update Freecover Table
-exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS]
+exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS_TEST]
 @in_tablename = ''calibressisdev.dbo.ccomm_freecovers_'+@suffix+''',
-@out_tablename = ''calibressisdev.dbo.ccomm_freecovers_'+@suffix+'_'+@version+''',
+@out_tablename = ''calibressisdev.dbo.ccomm_freecovers_final'',
  @clause = '''',
+ @version = '+@version+', 
  @part_key =''section
  ,covertype,product''
  
 
  ---- Update Scheme Table
- exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS]
+ exec Calibressisdev.dbo.[EMULA_UPDATE_SDP_REL_TABLES_IMPACT_ANALYSIS_TEST]
 @in_tablename = ''calibressisdev.dbo.ccomm_scheme_'+@suffix+''',
-@out_tablename = ''calibressisdev.dbo.ccomm_scheme_'+@suffix+'_'+@version+''',
+@out_tablename = ''calibressisdev.dbo.ccomm_scheme_final'',
  @clause = '''',
+ @version = '+@version+', 
  @part_key =''schemeid
  ,relativitytype''
  
 
  
---------------------------
-drop table if exists CalibreSSiSdev.emula.version_max_'+@suffix+';
-
-select ''FIRE'' as tbl, max(version) as version_max, max(effectivedate) as effe_max, max(releasedate) as release_max 
-into CalibreSSiSdev.emula.version_max_'+@suffix+'
-from calibressisdev.dbo.ccomm_businessproperty_sicurve_'+@suffix+'_'+@version+'
-union all select ''FIRE'' as tbl, max(version) as version_max, max(effectivedate) as effe_max, max(releasedate) as release_max from calibressisdev.dbo.ccomm_businessproperty_'+@suffix+'_'+@version+'
-union all select ''com_occu'' as tbl, max(version) as version_max, max(effectivedate) as effe_max, max(releasedate) as release_max from calibressisdev.dbo.ccomm_occupation_'+@suffix+'_'+@version+'
-union all select ''com_excess'' as tbl, max(version) as version_max, max(effectivedate) as effe_max, max(releasedate) as release_max from calibressisdev.dbo.ccomm_excess_'+@suffix+'_'+@version+'
-union all select ''com_Loca'' as tbl, max(version) as version_max, max(effectivedate) as effe_max, max(releasedate) as release_max from calibressisdev.dbo.ccomm_location_'+@suffix+'_'+@version+'
-union all select ''LPUB'' as tbl, max(version) as version_max, max(effectivedate) as effe_max, max(releasedate) as release_max from calibressisdev.dbo.ccomm_liability_'+@suffix+'_'+@version+'
-union all select ''BUSI'' as tbl, max(version) as version_max, max(effectivedate) as effe_max, max(releasedate) as release_max from calibressisdev.dbo.ccomm_bi_'+@suffix+'_'+@version+'
-union all select ''com_min'' as tbl, max(version) as version_max, max(effectivedate) as effe_max, max(releasedate) as release_max from calibressisdev.dbo.ccomm_minimum_'+@suffix+'_'+@version+'
-union all select ''ELEC'' as tbl, max(version) as version_max, max(effectivedate) as effe_max, max(releasedate) as release_max from calibressisdev.dbo.ccomm_ee_'+@suffix+'_'+@version+'
-union all select ''GLSS'' as tbl, max(version) as version_max, max(effectivedate) as effe_max, max(releasedate) as release_max from calibressisdev.dbo.ccomm_glass_'+@suffix+'_'+@version+'
-union all select ''GENP'' as tbl, max(version) as version_max, max(effectivedate) as effe_max, max(releasedate) as release_max from calibressisdev.dbo.ccomm_gp_'+@suffix+'_'+@version+'
-union all select ''MACH'' as tbl, max(version) as version_max, max(effectivedate) as effe_max, max(releasedate) as release_max from calibressisdev.dbo.ccomm_machinery_'+@suffix+'_'+@version+'
-union all select ''MONE'' as tbl, max(version) as version_max, max(effectivedate) as effe_max, max(releasedate) as release_max from calibressisdev.dbo.ccomm_money_'+@suffix+'_'+@version+'
-union all select ''BURG'' as tbl, max(version) as version_max, max(effectivedate) as effe_max, max(releasedate) as release_max from calibressisdev.dbo.ccomm_theft_'+@suffix+'_'+@version+'
-union all select ''GITT'' as tbl, max(version) as version_max, max(effectivedate) as effe_max, max(releasedate) as release_max from calibressisdev.dbo.ccomm_transit_'+@suffix+'_'+@version+'
-union all select ''com_data'' as tbl, max(version) as version_max, max(effectivedate) as effe_max, max(releasedate) as release_max from calibressisdev.dbo.ccomm_data_'+@suffix+'_'+@version+'
-union all select ''com_freecover'' as tbl, max(version) as version_max, max(effectivedate) as effe_max, max(releasedate) as release_max from calibressisdev.dbo.ccomm_freecovers_'+@suffix+'_'+@version+'
-union all select ''com_scheme'' as tbl, max(version) as version_max, max(effectivedate) as effe_max, max(releasedate) as release_max from calibressisdev.dbo.ccomm_scheme_'+@suffix+'_'+@version+'
 ;'
 ;
 
